@@ -150,12 +150,28 @@ namespace SoulsHunter.EditorTools
             agent.enabled = false; // 내비메시가 구워진 뒤 EnemyAI.Start에서 켠다
 
             var ai = boss.AddComponent<EnemyAI>();
+            SetRef(ai, "telegraphMaterial", GetOrCreateTelegraphMaterial());
             var so = new SerializedObject(ai);
             var arr = so.FindProperty("telegraphRenderers");
             arr.arraySize = 2;
             arr.GetArrayElementAtIndex(0).objectReferenceValue = eyeL.GetComponent<Renderer>();
             arr.GetArrayElementAtIndex(1).objectReferenceValue = eyeR.GetComponent<Renderer>();
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        const string TelegraphMaterialPath = "Assets/_Project/Materials/AttackTelegraph.mat";
+
+        /// <summary>바닥 공격 범위용 머티리얼을 에셋으로 저장 (빌드에 셰이더가 포함되도록)</summary>
+        static Material GetOrCreateTelegraphMaterial()
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(TelegraphMaterialPath);
+            if (mat) return mat;
+            if (!AssetDatabase.IsValidFolder("Assets/_Project/Materials"))
+                AssetDatabase.CreateFolder("Assets/_Project", "Materials");
+            mat = AttackTelegraph.CreateMaterial();
+            AssetDatabase.CreateAsset(mat, TelegraphMaterialPath);
+            AssetDatabase.SaveAssets();
+            return mat;
         }
 
         static void Part(Transform parent, PrimitiveType type, string name, Vector3 pos, Vector3 euler, Vector3 scale,

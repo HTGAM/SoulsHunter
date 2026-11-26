@@ -50,6 +50,17 @@ namespace SoulsHunter.Enemy
         [SerializeField] Color windupColor = new(1f, 0.55f, 0.05f);
         [SerializeField] Color activeColor = new(1f, 0.05f, 0.05f);
 
+        [Header("Ground Telegraph (바닥 공격 범위)")]
+        [SerializeField] bool showGroundTelegraph = true;
+        [Tooltip("비워두면 실행 중에 만든다. 빌드에 넣으려면 에셋으로 지정")]
+        [SerializeField] Material telegraphMaterial;
+        [SerializeField] Color telegraphAreaColor = new(1f, 0.05f, 0.02f, 0.22f);
+        [SerializeField] Color telegraphFillColor = new(1f, 0.1f, 0.02f, 0.45f);
+        [SerializeField] Color telegraphEdgeColor = new(1f, 0.08f, 0.04f, 0.95f);
+        [SerializeField] Color telegraphActiveColor = new(1f, 0.2f, 0.1f, 0.8f);
+
+        AttackTelegraph groundTelegraph;
+
         NavMeshAgent agent;
         Health health;
         Health targetHealth;
@@ -94,6 +105,12 @@ namespace SoulsHunter.Enemy
             }
             if (target) targetHealth = target.GetComponent<Health>();
 
+            if (showGroundTelegraph)
+            {
+                groundTelegraph = AttackTelegraph.Create(transform, telegraphMaterial);
+                groundTelegraph.SetColors(telegraphAreaColor, telegraphFillColor, telegraphEdgeColor, telegraphActiveColor);
+            }
+
             agent.speed = moveSpeed;
             agent.stoppingDistance = engageDistance * 0.8f;
             agent.enabled = true;
@@ -116,6 +133,7 @@ namespace SoulsHunter.Enemy
             if (targetHealth && targetHealth.IsDead)
             {
                 if (state != State.Idle) ResetToSpawn();
+                UpdateTelegraph();
                 return;
             }
 
@@ -306,8 +324,35 @@ namespace SoulsHunter.Enemy
             transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(direction), maxDegrees);
         }
 
+        void OnDestroy()
+        {
+            if (groundTelegraph) Destroy(groundTelegraph.gameObject);
+        }
+
+        void UpdateGroundTelegraph()
+        {
+            if (!groundTelegraph) return;
+            var a = current;
+            if (state != State.Attack || a == null || timer >= a.windup + a.active)
+            {
+                groundTelegraph.Hide();
+                return;
+            }
+
+            // 남은 전진 거리만큼 영역을 앞으로 늘려서 돌진 경로까지 보여준다
+            float remainingLunge = a.lunge > 0f ? a.lunge * (1f - lungePrev) : 0f;
+            float depth = a.hitboxSize.z + remainingLunge;
+            Vector3 localCenter = new(a.hitboxCenter.x, 0f, a.hitboxCenter.z + remainingLunge * 0.5f);
+            Vector3 center = Feet + transform.rotation * localCenter;
+
+            bool active = timer >= a.windup;
+            float progress = a.windup > 0f ? timer / a.windup : 1f;
+            groundTelegraph.Show(center, transform.rotation, new Vector2(a.hitboxSize.x, depth), progress, active);
+        }
+
         void UpdateTelegraph()
         {
+            UpdateGroundTelegraph();
             if (telegraphRenderers == null || telegraphRenderers.Length == 0) return;
 
             Color c = idleColor;

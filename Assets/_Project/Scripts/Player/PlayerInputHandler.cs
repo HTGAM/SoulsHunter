@@ -7,8 +7,10 @@ namespace SoulsHunter.Player
     /// 키보드/마우스와 게임패드 입력을 한 곳에서 읽어 다른 컴포넌트에 넘겨준다.
     /// 키 배치는 코드에 정의되어 있어 별도 에셋 없이 동작한다.
     ///
-    /// 키보드/마우스: WASD 이동, 마우스 시점, Shift 달리기, Space 구르기, Q/휠클릭 락온
-    /// 게임패드:      왼스틱 이동, 오른스틱 시점, B(○) 짧게=구르기 / 길게=달리기, R3 락온
+    /// 키보드/마우스: WASD 이동, 마우스 시점, Shift 달리기, Space 구르기, Q/휠클릭 락온,
+    ///                좌클릭 약공격, 우클릭 강공격
+    /// 게임패드:      왼스틱 이동, 오른스틱 시점, B(○) 짧게=구르기 / 길게=달리기, R3 락온,
+    ///                R1 약공격, R2 강공격
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public class PlayerInputHandler : MonoBehaviour
@@ -24,7 +26,7 @@ namespace SoulsHunter.Player
         [Tooltip("이 시간보다 짧게 눌렀다 떼면 구르기, 더 오래 누르면 달리기")]
         [SerializeField] float padHoldThreshold = 0.25f;
 
-        InputAction move, lookMouse, lookStick, sprintKey, dodgeKey, padDodgeSprint, lockOn;
+        InputAction move, lookMouse, lookStick, sprintKey, dodgeKey, padDodgeSprint, lockOn, lightAttack, heavyAttack;
         float padPressTime;
 
         /// <summary>이동 입력 (길이 0~1)</summary>
@@ -34,6 +36,8 @@ namespace SoulsHunter.Player
         public bool SprintHeld { get; private set; }
         public bool DodgePressed { get; private set; }
         public bool LockOnPressed { get; private set; }
+        public bool LightAttackPressed { get; private set; }
+        public bool HeavyAttackPressed { get; private set; }
 
         void Awake()
         {
@@ -55,6 +59,11 @@ namespace SoulsHunter.Player
             lockOn = new InputAction("LockOn", InputActionType.Button, "<Keyboard>/q");
             lockOn.AddBinding("<Mouse>/middleButton");
             lockOn.AddBinding("<Gamepad>/rightStickPress");
+
+            lightAttack = new InputAction("LightAttack", InputActionType.Button, "<Mouse>/leftButton");
+            lightAttack.AddBinding("<Gamepad>/rightShoulder");
+            heavyAttack = new InputAction("HeavyAttack", InputActionType.Button, "<Mouse>/rightButton");
+            heavyAttack.AddBinding("<Gamepad>/rightTrigger");
         }
 
         void OnEnable()
@@ -67,7 +76,7 @@ namespace SoulsHunter.Player
             foreach (var a in All()) a.Disable();
             Move = Vector2.zero;
             LookDelta = Vector2.zero;
-            SprintHeld = DodgePressed = LockOnPressed = false;
+            SprintHeld = DodgePressed = LockOnPressed = LightAttackPressed = HeavyAttackPressed = false;
         }
 
         void OnDestroy()
@@ -75,7 +84,7 @@ namespace SoulsHunter.Player
             foreach (var a in All()) a.Dispose();
         }
 
-        InputAction[] All() => new[] { move, lookMouse, lookStick, sprintKey, dodgeKey, padDodgeSprint, lockOn };
+        InputAction[] All() => new[] { move, lookMouse, lookStick, sprintKey, dodgeKey, padDodgeSprint, lockOn, lightAttack, heavyAttack };
 
         void Update()
         {
@@ -99,6 +108,11 @@ namespace SoulsHunter.Player
             SprintHeld = sprintKey.IsPressed() || padSprint;
             DodgePressed = dodgeKey.WasPressedThisFrame() || padDodge;
             LockOnPressed = lockOn.WasPressedThisFrame();
+
+            // 커서가 풀린 상태의 클릭은 '커서 다시 잠그기'용이므로 공격으로 치지 않는다
+            bool cursorLocked = Cursor.lockState == CursorLockMode.Locked;
+            LightAttackPressed = lightAttack.WasPressedThisFrame() && (cursorLocked || Gamepad.current?.rightShoulder.wasPressedThisFrame == true);
+            HeavyAttackPressed = heavyAttack.WasPressedThisFrame() && (cursorLocked || Gamepad.current?.rightTrigger.wasPressedThisFrame == true);
         }
     }
 }

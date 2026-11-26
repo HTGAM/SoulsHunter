@@ -1,6 +1,7 @@
 using System;
 using UnityEngine;
 using SoulsHunter.CameraSystem;
+using SoulsHunter.Core;
 
 namespace SoulsHunter.Player
 {
@@ -69,6 +70,15 @@ namespace SoulsHunter.Player
         public bool IsInvulnerable => isDodging && dodgeTimer >= dodgeIFrames.x && dodgeTimer <= dodgeIFrames.y;
         public Vector3 HorizontalVelocity => horizontalVelocity;
         public ThirdPersonCamera PlayerCamera => playerCamera;
+        public Animator Animator => animator;
+
+        /// <summary>
+        /// 공격 등 다른 행동 중일 때 true. 이동 입력과 회피를 막는다.
+        /// (PlayerCombat처럼 이 컴포넌트보다 먼저 Update되는 쪽에서 매 프레임 설정)
+        /// </summary>
+        public bool ActionLocked { get; set; }
+
+        Vector3 externalDisplacement;
 
         /// <summary>회피 시작. 인자는 백스텝 여부.</summary>
         public event Action<bool> Dodged;
@@ -96,13 +106,17 @@ namespace SoulsHunter.Player
 
             Vector3 moveDir = GetCameraRelativeInput();
 
-            if (!isDodging && Time.time <= dodgeBufferedUntil && controller.isGrounded && stamina.CanUse)
+            if (!isDodging && !ActionLocked && Time.time <= dodgeBufferedUntil && controller.isGrounded && stamina.CanUse)
             {
                 dodgeBufferedUntil = float.NegativeInfinity;
                 StartDodge(moveDir);
             }
 
-            Vector3 displacement = isDodging ? UpdateDodge(dt) : UpdateMovement(moveDir, dt);
+            Vector3 displacement = isDodging ? UpdateDodge(dt)
+                : ActionLocked ? UpdateLocked(dt)
+                : UpdateMovement(moveDir, dt);
+            displacement += externalDisplacement;
+            externalDisplacement = Vector3.zero;
 
             if (controller.isGrounded && verticalVelocity < 0f) verticalVelocity = -2f; // 바닥에 붙여두기
             verticalVelocity += gravity * dt;
@@ -147,6 +161,34 @@ namespace SoulsHunter.Player
             RotateTowards(face, rotationSpeed * dt);
 
             return horizontalVelocity * dt;
+        }
+
+        Vector3 UpdateLocked(float dt)
+        {
+            IsSprinting = false;
+            horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, Vector3.zero, acceleration * dt);
+            return horizontalVelocity * dt;
+        }
+
+        /// <summary>이번 프레임에 추가로 이동시킬 양 (공격 전진 등). 충돌은 CharacterController가 처리한다.</summary>
+        public void AddDisplacement(Vector3 delta) => externalDisplacement += delta;
+
+        /// <summary>최대 maxDegrees만큼 해당 방향으로 몸을 돌린다.</summary>
+        public void FaceTowards(Vector3 direction, float maxDegrees) => RotateTowards(direction, maxDegrees);
+
+        /// <summary>
+        /// 행동을 시작할 때 바라볼 방향: 락온 대상 → 이동 입력 방향 → 현재 정면 순.
+        /// </summary>
+        public Vector3 GetIntendedFacing()
+        {
+            if (TryGetLockPosition(out Vector3 lockPos))
+            {
+                Vector3 d = lockPos - transform.position;
+                d.y = 0f;
+                if (d.sqrMagnitude > 0.01f) return d.normalized;
+            }
+            Vector3 move = GetCameraRelativeInput();
+            return move.sqrMagnitude > 0.01f ? move.normalized : transform.forward;
         }
 
         void StartDodge(Vector3 moveDir)
@@ -233,24 +275,8 @@ namespace SoulsHunter.Player
             SetBool(LockedOnHash, playerCamera && playerCamera.IsLockedOn);
         }
 
-        // 애니메이터에 해당 파라미터가 없으면 조용히 무시한다
-        System.Collections.Generic.HashSet<int> animParams;
-        bool HasParam(int hash)
-        {
-            if (animParams == null)
-            {
-                animParams = new System.Collections.Generic.HashSet<int>();
-                foreach (var p in animator.parameters) animParams.Add(p.nameHash);
-            }
-            return animParams.Contains(hash);
-        }
-        void SetFloat(int hash, float v, float damp = 0f)
-        {
-            if (!HasParam(hash)) return;
-            if (damp > 0f) animator.SetFloat(hash, v, damp, Time.deltaTime);
-            else animator.SetFloat(hash, v);
-        }
-        void SetBool(int hash, bool v) { if (HasParam(hash)) animator.SetBool(hash, v); }
-        void SetTrigger(int hash) { if (HasParam(hash)) animator.SetTrigger(hash); }
+        void SetFloat(int hash, float v, float damp = 0f) => animator.TrySetFloat(hash, v, damp);
+        void SetBool(int hash, bool v) => animator.TrySetBool(hash, v);
+        void SetTrigger(int hash) => animator.TrySetTrigger(hash);
     }
 }

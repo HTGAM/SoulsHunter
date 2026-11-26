@@ -51,6 +51,14 @@ namespace SoulsHunter.Combat
                 };
         }
 
+        // 월드 리셋 시 부활 (EnemyAI가 붙어 있으면 EnemyAI가 대신 처리)
+        void OnEnable() => SoulsHunter.Core.GameEvents.WorldReset += OnWorldReset;
+        void OnDisable() => SoulsHunter.Core.GameEvents.WorldReset -= OnWorldReset;
+        void OnWorldReset()
+        {
+            if (!GetComponent<SoulsHunter.Enemy.EnemyAI>()) ResetAll();
+        }
+
         void Flash(Color color, float duration)
         {
             if (!isActiveAndEnabled) return;

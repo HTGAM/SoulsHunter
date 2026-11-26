@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.AI;
 using SoulsHunter.Combat;
+using SoulsHunter.Core;
 
 namespace SoulsHunter.Enemy
 {
@@ -335,6 +336,14 @@ namespace SoulsHunter.Enemy
             direction.y = 0f;
             if (direction.sqrMagnitude < 0.0001f) return;
             transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(direction), maxDegrees);
+        }
+
+        void OnEnable() => GameEvents.WorldReset += OnWorldReset;
+        void OnDisable() => GameEvents.WorldReset -= OnWorldReset;
+
+        void OnWorldReset()
+        {
+            if (agent && agent.enabled && agent.isOnNavMesh) ResetToSpawn();
         }
 
         void OnDestroy()

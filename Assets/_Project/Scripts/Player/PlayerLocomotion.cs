@@ -81,6 +81,12 @@ namespace SoulsHunter.Player
         /// <summary>피격 경직 중이면 true. 이동/회피/공격 모두 불가.</summary>
         public bool IsStunned => Time.time < stunnedUntil;
 
+        /// <summary>이동 속도 배율 (회복약 마시는 중 느리게 등). 1보다 작으면 달리기 불가.</summary>
+        public float SpeedMultiplier { get; set; } = 1f;
+
+        /// <summary>true면 회피 불가 (회복약 마시는 중 등)</summary>
+        public bool DodgeBlocked { get; set; }
+
         Vector3 externalDisplacement;
         float stunnedUntil;
 
@@ -111,7 +117,7 @@ namespace SoulsHunter.Player
             Vector3 moveDir = GetCameraRelativeInput();
 
             bool locked = ActionLocked || IsStunned;
-            if (!isDodging && !locked && Time.time <= dodgeBufferedUntil && controller.isGrounded && stamina.CanUse)
+            if (!isDodging && !locked && !DodgeBlocked && Time.time <= dodgeBufferedUntil && controller.isGrounded && stamina.CanUse)
             {
                 dodgeBufferedUntil = float.NegativeInfinity;
                 StartDodge(moveDir);
@@ -148,14 +154,14 @@ namespace SoulsHunter.Player
 
             // 달리기: 스태미나가 바닥나면 버튼을 뗄 때까지 다시 못 달림
             if (!input.SprintHeld) sprintLockedOut = false;
-            IsSprinting = input.SprintHeld && hasInput && !sprintLockedOut && stamina.CanUse;
+            IsSprinting = input.SprintHeld && hasInput && !sprintLockedOut && stamina.CanUse && SpeedMultiplier >= 1f;
             if (IsSprinting)
             {
                 stamina.Drain(sprintStaminaPerSecond * dt);
                 if (!stamina.CanUse) sprintLockedOut = true;
             }
 
-            float speed = IsSprinting ? sprintSpeed : runSpeed * moveDir.magnitude;
+            float speed = (IsSprinting ? sprintSpeed : runSpeed * moveDir.magnitude) * SpeedMultiplier;
             Vector3 targetVelocity = hasInput ? moveDir.normalized * speed : Vector3.zero;
             horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, targetVelocity, acceleration * dt);
 

@@ -6,6 +6,9 @@ using SoulsHunter.CameraSystem;
 using SoulsHunter.Combat;
 using SoulsHunter.Core;
 using SoulsHunter.Enemy;
+using SoulsHunter.Items;
+using SoulsHunter.World;
+using System.Collections.Generic;
 using SoulsHunter.Player;
 using SoulsHunter.UI;
 
@@ -18,7 +21,7 @@ namespace SoulsHunter.EditorTools
     /// </summary>
     public static class TestArenaBuilder
     {
-        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD" };
+        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD", "Bonfire" };
 
         [MenuItem("SoulsHunter/Build Test Arena")]
         static void Build()
@@ -66,6 +69,9 @@ namespace SoulsHunter.EditorTools
             var locomotion = player.AddComponent<PlayerLocomotion>();
             player.AddComponent<PlayerCombat>();
             player.AddComponent<PlayerDamageHandler>();
+            player.AddComponent<PlayerFlask>();
+            player.AddComponent<PlayerInteractor>();
+            player.AddComponent<PlayerInventory>();
 
             // 카메라
             var cam = Camera.main;
@@ -94,6 +100,10 @@ namespace SoulsHunter.EditorTools
             SetRef(hud, "playerHealth", playerHealth);
             SetRef(hud, "playerStamina", stamina);
             SetRef(hud, "playerCamera", tpc);
+            hud.gameObject.AddComponent<GameplayHUD>();
+
+            // 화톳불 (시작 지점 옆)
+            BuildBonfire(new Vector3(-3f, 0f, -3f));
 
             // 허수아비
             var dummies = Create("Dummies");
@@ -149,6 +159,27 @@ namespace SoulsHunter.EditorTools
             agent.angularSpeed = 0f;
             agent.enabled = false; // 내비메시가 구워진 뒤 EnemyAI.Start에서 켠다
 
+            // 보상 (토벌 + 부위 파괴)
+            var scale = GetOrCreateItem("RavagerScale", "철갑 비늘", "Ravager의 단단한 비늘. 방어구 소재.", 2);
+            var hide = GetOrCreateItem("RavagerHide", "철갑 가죽", "질기고 무거운 가죽.", 2);
+            var gem = GetOrCreateItem("RavagerGem", "철갑의 보옥", "몸속에서 드물게 자라는 보석. 아주 귀하다.", 6);
+            var fang = GetOrCreateItem("RavagerFang", "강철 엄니", "머리를 파괴해야 얻을 수 있는 엄니.", 3);
+            var spike = GetOrCreateItem("RavagerTailSpike", "꼬리 가시", "꼬리를 파괴해야 얻을 수 있는 가시.", 3);
+            var rewards = boss.AddComponent<MonsterRewards>();
+            rewards.EditorSetup(
+                new List<MonsterRewards.Reward>
+                {
+                    new() { item = scale, min = 2, max = 3 },
+                    new() { item = hide, min = 1, max = 2 },
+                    new() { item = gem, min = 1, max = 1, chance = 0.1f },
+                },
+                new List<MonsterRewards.PartReward>
+                {
+                    new() { partName = "Head", rewards = new() { new() { item = fang, min = 1, max = 2 } } },
+                    new() { partName = "Tail", rewards = new() { new() { item = spike, min = 1, max = 1 } } },
+                });
+            EditorUtility.SetDirty(rewards);
+
             var ai = boss.AddComponent<EnemyAI>();
             SetRef(ai, "telegraphMaterial", GetOrCreateTelegraphMaterial());
             var so = new SerializedObject(ai);
@@ -157,6 +188,53 @@ namespace SoulsHunter.EditorTools
             arr.GetArrayElementAtIndex(0).objectReferenceValue = eyeL.GetComponent<Renderer>();
             arr.GetArrayElementAtIndex(1).objectReferenceValue = eyeR.GetComponent<Renderer>();
             so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static void BuildBonfire(Vector3 pos)
+        {
+            var root = Create("Bonfire");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
+
+            Primitive(PrimitiveType.Cylinder, "Stones", root.transform, new Vector3(0f, 0.1f, 0f), new Vector3(1.2f, 0.1f, 1.2f), MakeMaterial(new Color(0.3f, 0.28f, 0.26f)));
+            var sword = Visual(PrimitiveType.Cube, "Coiled Sword", root.transform, new Vector3(0f, 0.7f, 0f), new Vector3(0.08f, 1.2f, 0.08f), MakeMaterial(new Color(0.4f, 0.35f, 0.3f)));
+            sword.transform.localRotation = Quaternion.Euler(0f, 0f, 8f);
+
+            var flameMat = MakeMaterial(new Color(1f, 0.45f, 0.1f));
+            flameMat.EnableKeyword("_EMISSION");
+            flameMat.SetColor("_EmissionColor", new Color(1f, 0.45f, 0.1f) * 3f);
+            var flame = Visual(PrimitiveType.Sphere, "Flame", root.transform, new Vector3(0f, 0.45f, 0f), new Vector3(0.5f, 0.7f, 0.5f), flameMat);
+
+            var lightGo = new GameObject("Fire Light");
+            lightGo.transform.SetParent(root.transform, false);
+            lightGo.transform.localPosition = new Vector3(0f, 1f, 0f);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.6f, 0.25f);
+            light.range = 8f;
+            light.intensity = 3f;
+
+            var bonfire = root.AddComponent<Bonfire>();
+            SetString(bonfire, "bonfireName", "아레나 입구");
+            SetRef(bonfire, "fireLight", light);
+            SetRef(bonfire, "flame", flame);
+        }
+
+        const string ItemFolder = "Assets/_Project/Data/Items";
+
+        static ItemData GetOrCreateItem(string file, string name, string desc, int rarity)
+        {
+            string path = $"{ItemFolder}/{file}.asset";
+            var item = AssetDatabase.LoadAssetAtPath<ItemData>(path);
+            if (item) return item;
+
+            if (!AssetDatabase.IsValidFolder("Assets/_Project/Data")) AssetDatabase.CreateFolder("Assets/_Project", "Data");
+            if (!AssetDatabase.IsValidFolder(ItemFolder)) AssetDatabase.CreateFolder("Assets/_Project/Data", "Items");
+            item = ScriptableObject.CreateInstance<ItemData>();
+            item.EditorSetup(name, desc, rarity);
+            AssetDatabase.CreateAsset(item, path);
+            AssetDatabase.SaveAssets();
+            return item;
         }
 
         const string TelegraphMaterialPath = "Assets/_Project/Materials/AttackTelegraph.mat";

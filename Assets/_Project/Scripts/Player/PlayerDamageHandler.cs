@@ -78,12 +78,26 @@ namespace SoulsHunter.Player
             yield return new WaitForSeconds(respawnDelay);
             Vector3 pos = respawnPoint ? respawnPoint.position : startPosition;
             Quaternion rot = respawnPoint ? respawnPoint.rotation : startRotation;
+            if (hasCustomRespawn) { pos = customRespawnPos; rot = customRespawnRot; }
             locomotion.Teleport(pos, rot);
             locomotion.ClearStun();
             health.ResetHealth();
             if (stamina) stamina.Refill();
             locomotion.Animator.TrySetBool(DeadHash, false);
+            GameEvents.RaiseWorldReset(); // 소울류: 죽으면 적들도 부활
             Respawned?.Invoke();
+        }
+
+        bool hasCustomRespawn;
+        Vector3 customRespawnPos;
+        Quaternion customRespawnRot;
+
+        /// <summary>마지막으로 휴식한 화톳불 등에서 부활하도록 설정</summary>
+        public void SetRespawnPoint(Vector3 position, Quaternion rotation)
+        {
+            hasCustomRespawn = true;
+            customRespawnPos = position;
+            customRespawnRot = rotation;
         }
 
         void Push(Vector3 direction, float distance, float duration)

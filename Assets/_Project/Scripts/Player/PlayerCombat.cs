@@ -88,6 +88,7 @@ namespace SoulsHunter.Player
         PlayerInputHandler input;
         PlayerStamina stamina;
         Health ownHealth;
+        PlayerFlask flask;
 
         AttackStep current;
         AttackType currentType;
@@ -122,6 +123,7 @@ namespace SoulsHunter.Player
             input = GetComponent<PlayerInputHandler>();
             stamina = GetComponent<PlayerStamina>();
             ownHealth = GetComponent<Health>();
+            flask = GetComponent<PlayerFlask>();
             if (ownHealth) ownHealth.InvulnerabilityCheck = () => locomotion.IsInvulnerable;
 
             locomotion.Dodged += _ => EndAttack(); // 구르기는 공격을 캔슬한다
@@ -150,7 +152,7 @@ namespace SoulsHunter.Player
 
             if (IsAttacking) TickAttack(Time.deltaTime);
 
-            if (!IsAttacking && bufferedAttack.HasValue && !locomotion.IsDodging)
+            if (!IsAttacking && bufferedAttack.HasValue && !locomotion.IsDodging && !(flask && flask.IsDrinking))
             {
                 var type = bufferedAttack.Value;
                 bufferedAttack = null;

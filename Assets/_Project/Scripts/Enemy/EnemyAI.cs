@@ -32,15 +32,19 @@ namespace SoulsHunter.Enemy
         [Tooltip("공격 사이 쉬는 시간(초) 범위")]
         [SerializeField] Vector2 decisionDelay = new(0.4f, 1.2f);
         [SerializeField] float staggerDuration = 1.6f;
+        [Tooltip("공격 중에는 몸을 돌리지 않는다 (공격 시작 순간의 방향으로 고정)")]
+        [SerializeField] bool lockFacingDuringAttack = true;
+        [Tooltip("공격 중에는 제자리에 멈춘다 (돌진 공격(isDash)만 예외)")]
+        [SerializeField] bool stayInPlaceDuringAttack = true;
         [SerializeField] LayerMask hitMask = ~0;
 
         [Header("Attacks")]
         [SerializeField] List<EnemyAttack> attacks = new()
         {
             //    이름        최소/최대거리  각도  가중치 쿨  피해  강인  예고   판정   빈틈  추적  전진  전진구간          판정중심(발 기준)    판정크기
-            new("Swipe",     0f, 5f,    60f, 3f,   0f, 25f, 15f, 0.70f, 0.20f, 0.9f, 120f,  1f, new(0.4f, 0.9f), new(0f, 1f, 3.5f), new(4.5f, 2.5f, 3f)),
-            new("Slam",      0f, 5.5f,  40f, 2f,   4f, 45f, 40f, 1.30f, 0.15f, 1.6f,  60f, 0.5f, new(0.8f, 1.4f), new(0f, 1f, 4f),   new(4f, 2f, 4f)),
-            new("Charge",    7f, 16f,   25f, 2f,   6f, 35f, 40f, 1.00f, 0.70f, 1.3f, 180f, 12f, new(1.0f, 1.7f), new(0f, 1f, 2.5f), new(3f, 2f, 2f)),
+            new("Swipe",     0f, 5f,    60f, 3f,   0f, 25f, 15f, 0.70f, 0.20f, 0.9f,   0f,  0f, Vector2.zero,    new(0f, 1f, 3.5f), new(4.5f, 2.5f, 3f)),
+            new("Slam",      0f, 5.5f,  40f, 2f,   4f, 45f, 40f, 1.30f, 0.15f, 1.6f,   0f,  0f, Vector2.zero,    new(0f, 1f, 4f),   new(4f, 2f, 4f)),
+            new("Charge",    7f, 16f,   25f, 2f,   6f, 35f, 40f, 1.00f, 0.70f, 1.3f,   0f, 12f, new(1.0f, 1.7f), new(0f, 1f, 2.5f), new(3f, 2f, 2f), isDash: true),
             new("Tail Spin", 0f, 4.5f, 360f, 1.5f, 5f, 30f, 30f, 0.60f, 0.30f, 1.0f,   0f,  0f, Vector2.zero,    new(0f, 1f, 0f),   new(8f, 2f, 8f)),
         };
 
@@ -225,6 +229,14 @@ namespace SoulsHunter.Enemy
             attack.readyTime = Time.time + attack.cooldown;
             agent.isStopped = true;
             agent.ResetPath();
+            agent.velocity = Vector3.zero; // 미끄러지지 않고 그 자리에서 바로 멈춤
+        }
+
+        /// <summary>이 공격에서 실제로 전진할 거리</summary>
+        float EffectiveLunge(EnemyAttack a)
+        {
+            if (stayInPlaceDuringAttack && !a.isDash) return 0f;
+            return a.lungeWindow.y > a.lungeWindow.x ? a.lunge : 0f;
         }
 
         void TickAttack(Vector3 toTarget, float dt)
@@ -232,15 +244,16 @@ namespace SoulsHunter.Enemy
             var a = current;
             timer += dt;
 
-            if (timer < a.windup && a.trackingSpeed > 0f) Turn(toTarget, a.trackingSpeed * dt);
+            if (!lockFacingDuringAttack && timer < a.windup && a.trackingSpeed > 0f) Turn(toTarget, a.trackingSpeed * dt);
 
-            // 전진
-            if (a.lunge > 0f && a.lungeWindow.y > a.lungeWindow.x)
+            // 전진 (돌진 공격은 공격 시작 방향으로 일직선)
+            float lunge = EffectiveLunge(a);
+            if (lunge > 0f)
             {
                 float p = Mathf.Clamp01(Mathf.InverseLerp(a.lungeWindow.x, a.lungeWindow.y, timer));
                 if (p > lungePrev)
                 {
-                    agent.Move(transform.forward * ((p - lungePrev) * a.lunge));
+                    agent.Move(transform.forward * ((p - lungePrev) * lunge));
                     lungePrev = p;
                 }
             }
@@ -340,7 +353,7 @@ namespace SoulsHunter.Enemy
             }
 
             // 남은 전진 거리만큼 영역을 앞으로 늘려서 돌진 경로까지 보여준다
-            float remainingLunge = a.lunge > 0f ? a.lunge * (1f - lungePrev) : 0f;
+            float remainingLunge = EffectiveLunge(a) * (1f - lungePrev);
             float depth = a.hitboxSize.z + remainingLunge;
             Vector3 localCenter = new(a.hitboxCenter.x, 0f, a.hitboxCenter.z + remainingLunge * 0.5f);
             Vector3 center = Feet + transform.rotation * localCenter;

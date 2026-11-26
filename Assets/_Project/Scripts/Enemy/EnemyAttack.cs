@@ -34,6 +34,8 @@ namespace SoulsHunter.Enemy
         public float trackingSpeed = 90f;
 
         [Header("이동")]
+        [Tooltip("돌진 공격이면 체크. 체크 안 된 공격은 제자리에서 나간다 (EnemyAI의 Stay In Place 설정 시)")]
+        public bool isDash = false;
         [Tooltip("공격 중 앞으로 이동하는 거리")]
         public float lunge = 1f;
         [Tooltip("전진 시작/끝 시간(초, 공격 시작 기준)")]
@@ -51,8 +53,9 @@ namespace SoulsHunter.Enemy
 
         public EnemyAttack(string name, float minRange, float maxRange, float maxAngle, float weight, float cooldown,
                            float damage, float poise, float windup, float active, float recovery, float tracking,
-                           float lunge, Vector2 lungeWindow, Vector3 center, Vector3 size)
+                           float lunge, Vector2 lungeWindow, Vector3 center, Vector3 size, bool isDash = false)
         {
+            this.isDash = isDash;
             this.name = name; this.minRange = minRange; this.maxRange = maxRange; this.maxAngle = maxAngle;
             this.weight = weight; this.cooldown = cooldown; this.damage = damage; poiseDamage = poise;
             this.windup = windup; this.active = active; this.recovery = recovery; trackingSpeed = tracking;

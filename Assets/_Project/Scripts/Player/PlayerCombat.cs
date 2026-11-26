@@ -140,6 +140,14 @@ namespace SoulsHunter.Player
             // 공격 중 선입력은 다음 공격까지 유지, 그 외엔 잠깐만 유지
             if (bufferedAttack.HasValue && !IsAttacking && Time.time > bufferedUntil) bufferedAttack = null;
 
+            // 경직되거나 죽으면 공격 중단
+            if (locomotion.IsStunned || (ownHealth && ownHealth.IsDead))
+            {
+                EndAttack();
+                bufferedAttack = null;
+                return;
+            }
+
             if (IsAttacking) TickAttack(Time.deltaTime);
 
             if (!IsAttacking && bufferedAttack.HasValue && !locomotion.IsDodging)

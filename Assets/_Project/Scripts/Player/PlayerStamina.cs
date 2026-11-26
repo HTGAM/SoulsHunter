@@ -48,6 +48,8 @@ namespace SoulsHunter.Player
             Set(Current - amount);
         }
 
+        public void Refill() => Set(maxStamina);
+
         void Set(float value)
         {
             float clamped = Mathf.Clamp(value, 0f, maxStamina);

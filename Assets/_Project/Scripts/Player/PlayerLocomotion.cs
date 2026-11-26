@@ -78,7 +78,11 @@ namespace SoulsHunter.Player
         /// </summary>
         public bool ActionLocked { get; set; }
 
+        /// <summary>피격 경직 중이면 true. 이동/회피/공격 모두 불가.</summary>
+        public bool IsStunned => Time.time < stunnedUntil;
+
         Vector3 externalDisplacement;
+        float stunnedUntil;
 
         /// <summary>회피 시작. 인자는 백스텝 여부.</summary>
         public event Action<bool> Dodged;
@@ -106,14 +110,15 @@ namespace SoulsHunter.Player
 
             Vector3 moveDir = GetCameraRelativeInput();
 
-            if (!isDodging && !ActionLocked && Time.time <= dodgeBufferedUntil && controller.isGrounded && stamina.CanUse)
+            bool locked = ActionLocked || IsStunned;
+            if (!isDodging && !locked && Time.time <= dodgeBufferedUntil && controller.isGrounded && stamina.CanUse)
             {
                 dodgeBufferedUntil = float.NegativeInfinity;
                 StartDodge(moveDir);
             }
 
             Vector3 displacement = isDodging ? UpdateDodge(dt)
-                : ActionLocked ? UpdateLocked(dt)
+                : locked ? UpdateLocked(dt)
                 : UpdateMovement(moveDir, dt);
             displacement += externalDisplacement;
             externalDisplacement = Vector3.zero;
@@ -168,6 +173,28 @@ namespace SoulsHunter.Player
             IsSprinting = false;
             horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, Vector3.zero, acceleration * dt);
             return horizontalVelocity * dt;
+        }
+
+        /// <summary>seconds 동안 경직시킨다. 진행 중인 회피는 끊긴다.</summary>
+        public void Stun(float seconds)
+        {
+            stunnedUntil = Mathf.Max(stunnedUntil, Time.time + seconds);
+            isDodging = false;
+            IsSprinting = false;
+            dodgeBufferedUntil = float.NegativeInfinity;
+        }
+
+        public void ClearStun() => stunnedUntil = 0f;
+
+        /// <summary>순간이동 (리스폰 등). CharacterController는 잠깐 꺼야 위치가 바뀐다.</summary>
+        public void Teleport(Vector3 position, Quaternion rotation)
+        {
+            controller.enabled = false;
+            transform.SetPositionAndRotation(position, rotation);
+            controller.enabled = true;
+            horizontalVelocity = Vector3.zero;
+            verticalVelocity = 0f;
+            isDodging = false;
         }
 
         /// <summary>이번 프레임에 추가로 이동시킬 양 (공격 전진 등). 충돌은 CharacterController가 처리한다.</summary>

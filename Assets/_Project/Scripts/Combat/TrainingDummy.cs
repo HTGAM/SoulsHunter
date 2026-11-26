@@ -86,7 +86,14 @@ namespace SoulsHunter.Combat
             if (lockOn) lockOn.CanBeTargeted = false;
             SetVisible(false);
             yield return new WaitForSeconds(respawnTime);
+            ResetAll();
+        }
 
+        /// <summary>체력, 부위, 색, 표시 상태를 처음으로 되돌린다.</summary>
+        public void ResetAll()
+        {
+            StopAllCoroutines();
+            flash = null;
             foreach (var hb in hurtboxes) hb.ResetPart();
             foreach (var r in renderers) r.SetPropertyBlock(null);
             health.ResetHealth();

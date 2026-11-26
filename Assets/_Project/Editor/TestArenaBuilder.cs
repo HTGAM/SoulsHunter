@@ -1,8 +1,11 @@
 using UnityEditor;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using Unity.AI.Navigation;
 using SoulsHunter.CameraSystem;
 using SoulsHunter.Combat;
+using SoulsHunter.Core;
+using SoulsHunter.Enemy;
 using SoulsHunter.Player;
 using SoulsHunter.UI;
 
@@ -39,6 +42,10 @@ namespace SoulsHunter.EditorTools
             Primitive(PrimitiveType.Cube, "Pillar B", arena.transform, new Vector3(-8f, 2.5f, -3f), new Vector3(1.5f, 5f, 1.5f), wallMat);
             var ramp = Primitive(PrimitiveType.Cube, "Ramp", arena.transform, new Vector3(0f, 0.6f, -8f), new Vector3(4f, 0.2f, 6f), wallMat);
             ramp.transform.rotation = Quaternion.Euler(-15f, 0f, 0f);
+            var surface = arena.AddComponent<NavMeshSurface>();
+            surface.collectObjects = CollectObjects.Children;
+            surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
+            arena.AddComponent<BakeNavMeshOnAwake>();
 
             // 플레이어
             var player = Create("Player");
@@ -54,9 +61,11 @@ namespace SoulsHunter.EditorTools
             var stamina = player.AddComponent<PlayerStamina>();
             var playerHealth = player.AddComponent<Health>();
             SetString(playerHealth, "displayName", "Hunter");
+            SetFloat(playerHealth, "maxPoise", 20f);
             player.AddComponent<Hurtbox>();
             var locomotion = player.AddComponent<PlayerLocomotion>();
             player.AddComponent<PlayerCombat>();
+            player.AddComponent<PlayerDamageHandler>();
 
             // 카메라
             var cam = Camera.main;
@@ -90,20 +99,74 @@ namespace SoulsHunter.EditorTools
             var dummies = Create("Dummies");
             Dummy(dummies.transform, "Dummy A", new Vector3(-3f, 0f, 7f), 1f, 150f, enemyMat);
             Dummy(dummies.transform, "Dummy B", new Vector3(3f, 0f, 9f), 1f, 150f, enemyMat);
-            var big = Dummy(dummies.transform, "Big Monster", new Vector3(0f, 0f, 16f), 2.5f, 1200f, enemyMat);
-            SetFloat(big.GetComponent<Health>(), "maxPoise", 120f);
-
-            // 큰 몬스터: 머리(약점, 부위 파괴 가능) — 몬헌식 부위 판정 예시
-            var head = Primitive(PrimitiveType.Sphere, "Head (약점)", big.transform, new Vector3(0f, 0.9f, 0.35f), Vector3.one * 0.55f, weakMat);
-            var headBox = head.AddComponent<Hurtbox>();
-            SetString(headBox, "partName", "Head");
-            SetFloat(headBox, "damageMultiplier", 1.5f);
-            SetFloat(headBox, "breakThreshold", 200f);
+            BuildBoss(dummies.transform, new Vector3(0f, 0f, 20f), enemyMat, weakMat);
 
             Selection.activeGameObject = player;
             Undo.CollapseUndoOperations(group);
             EditorSceneManager.MarkSceneDirty(player.scene);
             Debug.Log("[SoulsHunter] 테스트 아레나 생성 완료. Play를 누르세요.");
+        }
+
+        /// <summary>
+        /// 네 발 몬스터 보스. 루트는 발 위치(크기 1), 몸 부위는 자식으로 둔다.
+        /// 부위마다 Hurtbox: 머리(약점·파괴), 꼬리(파괴), 다리(단단함), 몸통.
+        /// </summary>
+        static void BuildBoss(Transform parent, Vector3 pos, Material bodyMat, Material weakMat)
+        {
+            var boss = Create("Ravager");
+            boss.transform.SetParent(parent, false);
+            boss.transform.localPosition = pos;
+            boss.transform.rotation = Quaternion.Euler(0f, 180f, 0f); // 플레이어 쪽을 보게
+
+            var health = boss.AddComponent<Health>();
+            SetString(health, "displayName", "Ravager, the Iron Maw");
+            SetFloat(health, "maxHealth", 1200f);
+            SetFloat(health, "maxPoise", 120f);
+
+            Part(boss.transform, PrimitiveType.Capsule, "Body", new Vector3(0f, 2f, 0f), new Vector3(90f, 0f, 0f), new Vector3(2.4f, 2f, 2.4f), bodyMat, "Body", 1f, 0f);
+            Part(boss.transform, PrimitiveType.Sphere, "Head (약점)", new Vector3(0f, 1.8f, 2.6f), Vector3.zero, Vector3.one * 1.4f, weakMat, "Head", 1.5f, 200f);
+            Part(boss.transform, PrimitiveType.Capsule, "Tail", new Vector3(0f, 1.6f, -3.4f), new Vector3(90f, 0f, 0f), new Vector3(0.7f, 1.2f, 0.7f), bodyMat, "Tail", 1.2f, 150f);
+            foreach (var (x, z) in new[] { (-0.9f, 1.2f), (0.9f, 1.2f), (-0.9f, -1.2f), (0.9f, -1.2f) })
+                Part(boss.transform, PrimitiveType.Cube, "Leg", new Vector3(x, 0.5f, z), Vector3.zero, new Vector3(0.6f, 1f, 0.6f), bodyMat, "Leg", 0.8f, 0f);
+
+            // 공격 예고용 눈
+            var eyeMat = MakeMaterial(Color.black);
+            eyeMat.EnableKeyword("_EMISSION");
+            eyeMat.globalIlluminationFlags = MaterialGlobalIlluminationFlags.RealtimeEmissive;
+            var eyeL = Visual(PrimitiveType.Sphere, "Eye L", boss.transform, new Vector3(-0.35f, 2.1f, 3.2f), Vector3.one * 0.22f, eyeMat);
+            var eyeR = Visual(PrimitiveType.Sphere, "Eye R", boss.transform, new Vector3(0.35f, 2.1f, 3.2f), Vector3.one * 0.22f, eyeMat);
+
+            var lockOn = boss.AddComponent<LockOnTarget>();
+            SetVector(lockOn, "offset", new Vector3(0f, 2f, 0.5f));
+            var dummy = boss.AddComponent<TrainingDummy>();
+            SetFloat(dummy, "respawnTime", 6f);
+
+            var agent = boss.AddComponent<UnityEngine.AI.NavMeshAgent>();
+            agent.radius = 1.5f;
+            agent.height = 3.5f;
+            agent.baseOffset = 0f;
+            agent.acceleration = 20f;
+            agent.angularSpeed = 0f;
+            agent.enabled = false; // 내비메시가 구워진 뒤 EnemyAI.Start에서 켠다
+
+            var ai = boss.AddComponent<EnemyAI>();
+            var so = new SerializedObject(ai);
+            var arr = so.FindProperty("telegraphRenderers");
+            arr.arraySize = 2;
+            arr.GetArrayElementAtIndex(0).objectReferenceValue = eyeL.GetComponent<Renderer>();
+            arr.GetArrayElementAtIndex(1).objectReferenceValue = eyeR.GetComponent<Renderer>();
+            so.ApplyModifiedPropertiesWithoutUndo();
+        }
+
+        static void Part(Transform parent, PrimitiveType type, string name, Vector3 pos, Vector3 euler, Vector3 scale,
+                         Material mat, string partName, float multiplier, float breakThreshold)
+        {
+            var go = Primitive(type, name, parent, pos, scale, mat);
+            go.transform.localRotation = Quaternion.Euler(euler);
+            var hb = go.AddComponent<Hurtbox>();
+            SetString(hb, "partName", partName);
+            SetFloat(hb, "damageMultiplier", multiplier);
+            SetFloat(hb, "breakThreshold", breakThreshold);
         }
 
         static bool RemoveOld()

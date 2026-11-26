@@ -30,6 +30,9 @@ namespace SoulsHunter.UI
         GameObject targetRoot;
         Text targetName;
         Health trackedTarget;
+        Text deathText;
+        Image deathBand;
+        float deathAlpha;
 
         void Awake()
         {
@@ -76,6 +79,13 @@ namespace SoulsHunter.UI
                 targetBar.Set(target.Normalized);
                 targetBar.Tick(dt);
             }
+
+            // YOU DIED: 천천히 나타나고, 부활하면 바로 사라진다
+            bool dead = playerHealth && playerHealth.IsDead;
+            deathAlpha = dead ? Mathf.MoveTowards(deathAlpha, 1f, dt * 0.7f) : 0f;
+            deathText.color = new Color(0.65f, 0.05f, 0.05f, deathAlpha);
+            deathBand.color = new Color(0f, 0f, 0f, deathAlpha * 0.7f);
+            deathText.transform.localScale = Vector3.one * Mathf.Lerp(0.95f, 1.05f, deathAlpha);
         }
 
         // ───────── UI 생성 ─────────
@@ -118,6 +128,31 @@ namespace SoulsHunter.UI
             targetName.color = new Color(0.95f, 0.92f, 0.85f);
             targetName.alignment = TextAnchor.LowerLeft;
             targetRoot.SetActive(false);
+
+            // YOU DIED
+            var bandGo = new GameObject("Death Band", typeof(RectTransform), typeof(Image));
+            var br = (RectTransform)bandGo.transform;
+            br.SetParent(root, false);
+            br.anchorMin = new Vector2(0f, 0.5f);
+            br.anchorMax = new Vector2(1f, 0.5f);
+            br.sizeDelta = new Vector2(0f, 180f);
+            deathBand = bandGo.GetComponent<Image>();
+            deathBand.raycastTarget = false;
+            deathBand.color = Color.clear;
+
+            var deathGo = new GameObject("YOU DIED", typeof(RectTransform), typeof(Text));
+            var dr = (RectTransform)deathGo.transform;
+            dr.SetParent(br, false);
+            dr.anchorMin = Vector2.zero;
+            dr.anchorMax = Vector2.one;
+            dr.offsetMin = dr.offsetMax = Vector2.zero;
+            deathText = deathGo.GetComponent<Text>();
+            deathText.font = targetName.font;
+            deathText.fontSize = 110;
+            deathText.alignment = TextAnchor.MiddleCenter;
+            deathText.text = "YOU DIED";
+            deathText.raycastTarget = false;
+            deathText.color = Color.clear;
         }
 
         /// <summary>배경 + 잔상(chip) + 채움으로 된 막대</summary>

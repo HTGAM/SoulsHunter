@@ -649,16 +649,19 @@ namespace SoulsHunter.EditorTools
             {
                 var t = sm.AddAnyStateTransition(s);
                 t.hasExitTime = false;
+                t.hasFixedDuration = true;
                 t.duration = duration;
                 t.canTransitionToSelf = false;
                 t.AddCondition(mode, 0f, param);
                 return t;
             }
-            void BackByCondition(AnimatorState s, string param, AnimatorConditionMode mode)
+            // 전환 시간은 모두 초 단위 (몬헌처럼 동작 사이를 부드럽게 섞는다)
+            void BackByCondition(AnimatorState s, string param, AnimatorConditionMode mode, float duration = 0.25f)
             {
                 var t = s.AddTransition(loco);
                 t.hasExitTime = false;
-                t.duration = 0.2f;
+                t.hasFixedDuration = true;
+                t.duration = duration;
                 t.AddCondition(mode, 0f, param);
             }
             void BackByExitTime(AnimatorState s, float exitTime = 0.85f)
@@ -666,7 +669,8 @@ namespace SoulsHunter.EditorTools
                 var t = s.AddTransition(loco);
                 t.hasExitTime = true;
                 t.exitTime = exitTime;
-                t.duration = 0.2f;
+                t.hasFixedDuration = true;
+                t.duration = 0.25f;
             }
 
             // 죽음 (가장 먼저 검사)
@@ -683,8 +687,8 @@ namespace SoulsHunter.EditorTools
                 var s = State(name, clip, name == "AttackA" ? 1 : 2, 0);
                 s.timeParameterActive = true;
                 s.timeParameter = "AttackTime";
-                AnyTo(s, 0.08f, name);
-                BackByCondition(s, "Attacking", AnimatorConditionMode.IfNot);
+                AnyTo(s, 0.15f, name);   // 이전 동작(이동·이전 공격)에서 부드럽게 넘어감
+                BackByCondition(s, "Attacking", AnimatorConditionMode.IfNot, 0.3f); // 마무리 후 대기 자세로 천천히
             }
 
             // 회피: 재생 위치를 DodgeTime으로 구동
@@ -694,8 +698,8 @@ namespace SoulsHunter.EditorTools
                 var s = State(name, clip, name == "Roll" ? 3 : 4, 0);
                 s.timeParameterActive = true;
                 s.timeParameter = "DodgeTime";
-                AnyTo(s, 0.05f, name);
-                BackByCondition(s, "Dodging", AnimatorConditionMode.IfNot);
+                AnyTo(s, 0.08f, name);
+                BackByCondition(s, "Dodging", AnimatorConditionMode.IfNot, 0.22f);
             }
 
             // 한 번 재생하고 돌아오는 동작들. targetDuration > 0이면 코드의 동작 시간에 맞춰 재생 속도를 바꾼다.
@@ -822,8 +826,8 @@ namespace SoulsHunter.EditorTools
             Log("완료: Player에 캐릭터를 적용했어요. 씬을 저장하고 Play 해보세요.");
         }
 
-        const string RightSocketName = "Weapon Socket R";
-        const string LeftSocketName = "Weapon Socket L";
+        const string RightSocketName = WeaponSocketFitter.RightSocketName;
+        const string LeftSocketName = WeaponSocketFitter.LeftSocketName;
 
         /// <summary>
         /// 무기 소켓을 손·팔 뼈에 맞춰 만든다.
@@ -835,17 +839,8 @@ namespace SoulsHunter.EditorTools
         {
             var loadout = player.GetComponent<PlayerWeaponLoadout>();
             if (!loadout || !animator || !animator.isHuman) return;
-            Transform B(HumanBodyBones b) => animator.GetBoneTransform(b);
-            var root = player.transform;
-
-            var rHand = B(HumanBodyBones.RightHand);
-            var lHand = B(HumanBodyBones.LeftHand);
-            var lLower = B(HumanBodyBones.LeftLowerArm);
-            var chest = B(HumanBodyBones.Chest) ? B(HumanBodyBones.Chest) : B(HumanBodyBones.Spine);
-
-            (Vector3 pos, Quaternion rot)? right = null, left = null;
-
-            // 대기 자세로 잠깐 포즈를 잡고 계산 (끝나면 원래대로 돌아감)
+            // 대기 자세로 잠깐 포즈를 잡고 계산 (끝나면 원래대로 돌아감). 계산식은 실행 중 자동 정렬과 같다.
+            WeaponSocketFitter.Socket right, left;
             bool started = !AnimationMode.InAnimationMode();
             if (started) AnimationMode.StartAnimationMode();
             try
@@ -856,39 +851,7 @@ namespace SoulsHunter.EditorTools
                     AnimationMode.SampleAnimationClip(animator.gameObject, animationSet.idle, 0f);
                     AnimationMode.EndSampling();
                 }
-
-                if (rHand)
-                {
-                    var index = B(HumanBodyBones.RightIndexProximal);
-                    var little = B(HumanBodyBones.RightLittleProximal);
-                    Vector3 pos; Quaternion rot;
-                    if (index && little)
-                    {
-                        Vector3 knuckles = (index.position + little.position) * 0.5f;
-                        Vector3 blade = (index.position - little.position).normalized;      // 쥔 검의 축
-                        Vector3 finger = (knuckles - rHand.position).normalized;            // 손목 → 손가락
-                        pos = Vector3.Lerp(rHand.position, knuckles, 0.75f);                // 주먹 가운데
-                        rot = Quaternion.LookRotation(blade, Vector3.Cross(blade, finger));  // x = 손가락 방향(코등이)
-                    }
-                    else { pos = rHand.position; rot = root.rotation; }
-                    right = (rHand.InverseTransformPoint(pos), Quaternion.Inverse(rHand.rotation) * rot);
-                }
-
-                if (lLower && lHand)
-                {
-                    Vector3 along = (lHand.position - lLower.position).normalized;          // 팔꿈치 → 손목
-                    Vector3 up = Vector3.ProjectOnPlane(Vector3.up, along);
-                    if (up.sqrMagnitude < 0.01f) up = Vector3.ProjectOnPlane(root.forward, along);
-                    up.Normalize();
-                    Vector3 normal = Vector3.Cross(up, along);                              // 방패 앞면 방향 (x)
-                    Vector3 mid = Vector3.Lerp(lLower.position, lHand.position, 0.55f);
-                    Vector3 outward = Vector3.ProjectOnPlane(mid - (chest ? chest.position : root.position), Vector3.up).normalized
-                                      + root.forward * 0.3f;
-                    if (Vector3.Dot(normal, outward) < 0f) { along = -along; normal = -normal; }
-                    Vector3 pos = mid + normal * 0.07f;                                     // 팔뚝 바깥쪽
-                    Quaternion rot = Quaternion.LookRotation(along, up);                    // z = 팔뚝, y = 위, x = 앞면
-                    left = (lLower.InverseTransformPoint(pos), Quaternion.Inverse(lLower.rotation) * rot);
-                }
+                WeaponSocketFitter.Compute(animator, player.transform, out right, out left);
             }
             finally
             {
@@ -899,24 +862,23 @@ namespace SoulsHunter.EditorTools
             foreach (var t in animator.GetComponentsInChildren<Transform>(true))
                 if (t && (t.name == RightSocketName || t.name == LeftSocketName)) Undo.DestroyObjectImmediate(t.gameObject);
 
-            Transform Make(string name, Transform parent, (Vector3 pos, Quaternion rot)? local)
+            Transform Make(string name, WeaponSocketFitter.Socket s)
             {
-                if (!parent || local == null) return null;
-                var s = new GameObject(name).transform;
-                Undo.RegisterCreatedObjectUndo(s.gameObject, name);
-                s.SetParent(parent, false);
-                s.localPosition = local.Value.pos;
-                s.localRotation = local.Value.rot;
-                return s;
+                if (!s.valid) return null;
+                var t = new GameObject(name).transform;
+                Undo.RegisterCreatedObjectUndo(t.gameObject, name);
+                t.SetParent(s.parent, false);
+                t.localPosition = s.localPosition;
+                t.localRotation = s.localRotation;
+                return t;
             }
 
-            SetRef(loadout, "rightHandSocket", Make(RightSocketName, rHand, right));
-            SetRef(loadout, "leftHandSocket", Make(LeftSocketName, lLower, left));
+            SetRef(loadout, "rightHandSocket", Make(RightSocketName, right));
+            SetRef(loadout, "leftHandSocket", Make(LeftSocketName, left));
 
-            // 한손검 부품 좌표 기준: 손잡이(코등이 바로 뒤)와 방패 중심
             var so = new SerializedObject(loadout);
-            so.FindProperty("rightGrip").vector3Value = new Vector3(0.45f, 1.1f, 0.05f);
-            so.FindProperty("leftGrip").vector3Value = new Vector3(-0.5f, 1.0f, 0.35f);
+            so.FindProperty("rightGrip").vector3Value = WeaponSocketFitter.SwordGrip;
+            so.FindProperty("leftGrip").vector3Value = WeaponSocketFitter.ShieldGrip;
             so.ApplyModifiedProperties();
             Log("무기 소켓: 검 = 오른손 주먹, 방패 = 왼쪽 팔뚝 바깥쪽");
         }

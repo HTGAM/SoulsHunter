@@ -24,6 +24,10 @@ namespace SoulsHunter.Animations
         [Tooltip("캐릭터 모델 (회피 방향으로 돌릴 대상)")]
         [SerializeField] Transform model;
         [SerializeField] bool rotateModelToDodgeDirection = true;
+        [Tooltip("방향을 바꿀 때 모델이 몸통보다 살짝 늦게 따라 돌아 부드럽게 보이게 한다 (클수록 빠름, 0이면 끔)")]
+        [SerializeField] float visualTurnSharpness = 14f;
+        [Tooltip("게임 시작 때 대기 자세 기준으로 검·방패 위치를 손·팔 뼈에 자동으로 맞춘다")]
+        [SerializeField] bool autoFitWeaponSockets = true;
 
         [Header("Controller Slots (Character Setup이 채움)")]
         [SerializeField] AnimationClip attackSlotA;
@@ -171,18 +175,62 @@ namespace SoulsHunter.Animations
         // 락온 중 옆/뒤로 구를 때: 구르는 애니메이션은 앞구르기 하나이므로 모델만 구르는 방향으로 돌린다
         void UpdateModelRotation()
         {
-            if (!model || !rotateModelToDodgeDirection) return;
+            if (!model) return;
 
-            Quaternion target = modelBaseRotation;
-            if (locomotion.IsDodging && !locomotion.IsBackstep && (!health || !health.IsDead))
+            Quaternion targetLocal = modelBaseRotation;
+            if (rotateModelToDodgeDirection && locomotion.IsDodging && !locomotion.IsBackstep && (!health || !health.IsDead))
             {
                 Vector3 dir = locomotion.DodgeDirection;
                 dir.y = 0f;
                 if (dir.sqrMagnitude > 0.01f)
-                    target = Quaternion.Inverse(transform.rotation) * Quaternion.LookRotation(dir) * modelBaseRotation;
+                    targetLocal = Quaternion.Inverse(transform.rotation) * Quaternion.LookRotation(dir) * modelBaseRotation;
             }
-            float speed = locomotion.IsDodging ? 40f : 14f;
-            model.localRotation = Quaternion.Slerp(model.localRotation, target, 1f - Mathf.Exp(-speed * Time.deltaTime));
+
+            // 월드 기준으로 부드럽게 따라 돌게 한다 → 방향을 휙 바꿔도 몸이 자연스럽게 돈다 (판정·이동은 즉시)
+            Quaternion desired = transform.rotation * targetLocal;
+            if (!hasSmoothedRotation) { smoothedRotation = desired; hasSmoothedRotation = true; }
+            float k = locomotion.IsDodging ? 40f : combat.IsAttacking ? 28f : visualTurnSharpness;
+            smoothedRotation = k <= 0f ? desired : Quaternion.Slerp(smoothedRotation, desired, 1f - Mathf.Exp(-k * Time.deltaTime));
+            smoothedRotation = Quaternion.RotateTowards(desired, smoothedRotation, 70f); // 너무 늦게 따라오진 않게
+            model.rotation = smoothedRotation;
+        }
+
+        Quaternion smoothedRotation;
+        bool hasSmoothedRotation;
+
+        // ───────── 무기 소켓 자동 정렬 ─────────
+
+        bool socketsFitted;
+        int fitFrame;
+
+        void LateUpdate()
+        {
+            // 애니메이터가 대기 자세를 한두 번 그린 뒤에 계산해야 손 모양이 제대로 잡힌다
+            if (!autoFitWeaponSockets || socketsFitted || !animator || !animator.isHuman) return;
+            if (++fitFrame < 3) return;
+            socketsFitted = true;
+
+            var loadout = GetComponent<PlayerWeaponLoadout>();
+            if (!loadout) return;
+            WeaponSocketFitter.Compute(animator, transform, out var right, out var left);
+            if (!right.valid) return;
+
+            Transform Make(WeaponSocketFitter.Socket s, string name)
+            {
+                if (!s.valid) return null;
+                var t = new GameObject(name).transform;
+                t.SetParent(s.parent, false);
+                t.localPosition = s.localPosition;
+                t.localRotation = s.localRotation;
+                return t;
+            }
+
+            var oldRight = loadout.RightHandSocket;
+            var oldLeft = loadout.LeftHandSocket;
+            loadout.SetHandSockets(Make(right, WeaponSocketFitter.RightSocketName), Make(left, WeaponSocketFitter.LeftSocketName),
+                                   WeaponSocketFitter.SwordGrip, WeaponSocketFitter.ShieldGrip);
+            if (oldRight) Destroy(oldRight.gameObject);
+            if (oldLeft) Destroy(oldLeft.gameObject);
         }
     }
 }

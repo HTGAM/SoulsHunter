@@ -263,7 +263,36 @@ namespace SoulsHunter.Player
                 if (d.sqrMagnitude > 0.01f) return d.normalized;
             }
             Vector3 move = GetCameraRelativeInput();
-            return move.sqrMagnitude > 0.01f ? move.normalized : transform.forward;
+            Vector3 baseDir = move.sqrMagnitude > 0.01f ? move.normalized : transform.forward;
+
+            // 몬헌식 공격 보정: 기준 방향(입력 또는 정면) 근처에 적이 있으면 그쪽으로 몸을 돌린다
+            if (TryFindSoftTarget(baseDir, out Vector3 toEnemy)) return toEnemy;
+            return baseDir;
+        }
+
+        [Header("Attack Aim Assist (락온이 아닐 때)")]
+        [Tooltip("이 거리 안의 적에게 공격 방향을 맞춘다")]
+        [SerializeField] float softAimRange = 4.5f;
+        [Tooltip("입력/정면 방향 기준 이 각도(좌우 합) 안의 적만")]
+        [SerializeField] float softAimAngle = 110f;
+
+        bool TryFindSoftTarget(Vector3 baseDir, out Vector3 direction)
+        {
+            direction = default;
+            float best = float.MaxValue;
+            foreach (var t in SoulsHunter.Combat.LockOnTarget.Active)
+            {
+                if (!t || !t.CanBeTargeted) continue;
+                Vector3 d = t.LockPosition - transform.position;
+                d.y = 0f;
+                float dist = d.magnitude;
+                if (dist < 0.05f || dist > softAimRange) continue;
+                float angle = Vector3.Angle(baseDir, d);
+                if (angle > softAimAngle * 0.5f) continue;
+                float score = dist + angle * 0.03f; // 가깝고 정면에 가까울수록 우선
+                if (score < best) { best = score; direction = d / dist; }
+            }
+            return best < float.MaxValue;
         }
 
         void StartDodge(Vector3 moveDir)

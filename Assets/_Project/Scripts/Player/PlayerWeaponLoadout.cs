@@ -41,6 +41,21 @@ namespace SoulsHunter.Player
 
         void Start() => Apply(weapon.Equipped);
 
+        /// <summary>
+        /// 손 소켓을 새로 지정하고 무기 모델을 다시 만든다 (캐릭터 모델에 맞춰 실행 중 자동 정렬할 때).
+        /// </summary>
+        public void SetHandSockets(Transform right, Transform left, Vector3 rightGripPoint, Vector3 leftGripPoint)
+        {
+            rightHandSocket = right;
+            leftHandSocket = left;
+            rightGrip = rightGripPoint;
+            leftGrip = leftGripPoint;
+            BuildModel(weapon ? weapon.Equipped : null);
+        }
+
+        public Transform RightHandSocket => rightHandSocket;
+        public Transform LeftHandSocket => leftHandSocket;
+
         void Apply(WeaponData w)
         {
             locomotion.WeaponSpeedMultiplier = w ? w.moveSpeedMultiplier : 1f;

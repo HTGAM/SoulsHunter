@@ -36,6 +36,10 @@ namespace SoulsHunter.CameraSystem
         [SerializeField] float distanceReturnSpeed = 6f;
         [Tooltip("몬스터에 가려도 카메라를 당기지 않는다 (큰 몬스터 상대 시 카메라 흔들림 방지)")]
         [SerializeField] bool ignoreEnemiesForCollision = true;
+        [Tooltip("벽에 막혔을 때 당기는 속도(m/s). 너무 크면 순간이동처럼 튄다")]
+        [SerializeField] float distancePullSpeed = 18f;
+        [Tooltip("가로·세로가 이보다 가는 물체(기둥, 울타리 말뚝 등)는 카메라가 통과한다 (몬헌 방식)")]
+        [SerializeField] float thinObstacleSize = 0.7f;
 
         [Header("Lock-On")]
         [SerializeField] float lockOnRange = 20f;
@@ -135,8 +139,9 @@ namespace SoulsHunter.CameraSystem
             Quaternion rotation = Quaternion.Euler(pitch, yaw, 0f);
             Vector3 back = rotation * Vector3.back;
             float allowed = ResolveCollision(pivot, back, distance);
+            // 막히면 빠르게(하지만 순간이동처럼 튀지 않게) 당기고, 벗어나면 천천히 돌아간다
             currentDistance = allowed < currentDistance
-                ? allowed // 벽에 막히면 즉시 당김
+                ? Mathf.MoveTowards(currentDistance, allowed, distancePullSpeed * Time.unscaledDeltaTime)
                 : Mathf.MoveTowards(currentDistance, allowed, distanceReturnSpeed * dt);
 
             transform.SetPositionAndRotation(pivot + back * currentDistance + ShakeOffset(rotation), rotation);
@@ -313,6 +318,9 @@ namespace SoulsHunter.CameraSystem
                 if (h.distance <= 0f) continue; // 시작 지점에서 이미 겹친 콜라이더
                 if (h.transform.IsChildOf(target)) continue;
                 if (ignoreEnemiesForCollision && h.collider.GetComponentInParent<LockOnTarget>()) continue;
+                // 가는 기둥·말뚝에 걸려 카메라가 갑자기 머리 뒤로 붙는 걸 막는다
+                var size = h.collider.bounds.size;
+                if (size.x < thinObstacleSize && size.z < thinObstacleSize) continue;
                 closest = Mathf.Min(closest, h.distance);
             }
             return Mathf.Max(minDistance, closest);

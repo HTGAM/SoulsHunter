@@ -133,7 +133,7 @@ namespace SoulsHunter.Player
 
         void OnDisable()
         {
-            if (hitStopRoutine != null) { StopCoroutine(hitStopRoutine); Time.timeScale = 1f; }
+            if (hitStopRoutine != null) { StopCoroutine(hitStopRoutine); Time.timeScale = GameState.IsPaused ? 0f : 1f; }
             EndAttack();
         }
 
@@ -300,7 +300,7 @@ namespace SoulsHunter.Player
         {
             Time.timeScale = 0.05f;
             yield return new WaitForSecondsRealtime(duration);
-            Time.timeScale = 1f;
+            Time.timeScale = GameState.IsPaused ? 0f : 1f; // 그사이 일시정지했으면 멈춘 채로 둔다
             hitStopRoutine = null;
         }
 

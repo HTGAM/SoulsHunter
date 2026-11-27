@@ -8,9 +8,10 @@ namespace SoulsHunter.Player
     /// 키 배치는 코드에 정의되어 있어 별도 에셋 없이 동작한다.
     ///
     /// 키보드/마우스: WASD 이동, 마우스 시점, Shift 달리기, Space 구르기, Q/휠클릭 락온,
-    ///                좌클릭 약공격, 우클릭 강공격, R 회복약, E 상호작용, Tab/I 가방
+    ///                좌클릭 약공격, 우클릭 강공격, Ctrl 가드(누르는 순간 패링), R 회복약, E 상호작용,
+    ///                Tab/I 가방, ESC 일시정지
     /// 게임패드:      왼스틱 이동, 오른스틱 시점, B(○) 짧게=구르기 / 길게=달리기, R3 락온,
-    ///                R1 약공격, R2 강공격, X(□) 회복약, Y(△) 상호작용, Select 가방
+    ///                R1 약공격, R2 강공격, L1 가드, X(□) 회복약, Y(△) 상호작용, Select 가방, Start 일시정지
     /// </summary>
     [DefaultExecutionOrder(-100)]
     public class PlayerInputHandler : MonoBehaviour
@@ -27,7 +28,7 @@ namespace SoulsHunter.Player
         [SerializeField] float padHoldThreshold = 0.25f;
 
         InputAction move, lookMouse, lookStick, sprintKey, dodgeKey, padDodgeSprint, lockOn, lightAttack, heavyAttack,
-                    useItem, interact, inventory;
+                    useItem, interact, inventory, guard, pause;
         float padPressTime;
 
         /// <summary>이동 입력 (길이 0~1)</summary>
@@ -42,6 +43,10 @@ namespace SoulsHunter.Player
         public bool UseItemPressed { get; private set; }
         public bool InteractPressed { get; private set; }
         public bool InventoryPressed { get; private set; }
+        public bool GuardHeld { get; private set; }
+        public bool GuardPressed { get; private set; }
+        /// <summary>일시정지 버튼 (일시정지 중에도 읽힌다)</summary>
+        public bool PausePressed { get; private set; }
 
         void Awake()
         {
@@ -76,6 +81,10 @@ namespace SoulsHunter.Player
             inventory = new InputAction("Inventory", InputActionType.Button, "<Keyboard>/tab");
             inventory.AddBinding("<Keyboard>/i");
             inventory.AddBinding("<Gamepad>/select");
+            guard = new InputAction("Guard", InputActionType.Button, "<Keyboard>/leftCtrl");
+            guard.AddBinding("<Gamepad>/leftShoulder");
+            pause = new InputAction("Pause", InputActionType.Button, "<Keyboard>/escape");
+            pause.AddBinding("<Gamepad>/start");
         }
 
         void OnEnable()
@@ -86,10 +95,16 @@ namespace SoulsHunter.Player
         void OnDisable()
         {
             foreach (var a in All()) a.Disable();
+            ClearGameplayInput();
+            PausePressed = false;
+        }
+
+        void ClearGameplayInput()
+        {
             Move = Vector2.zero;
             LookDelta = Vector2.zero;
             SprintHeld = DodgePressed = LockOnPressed = LightAttackPressed = HeavyAttackPressed = false;
-            UseItemPressed = InteractPressed = InventoryPressed = false;
+            UseItemPressed = InteractPressed = InventoryPressed = GuardHeld = GuardPressed = false;
         }
 
         void OnDestroy()
@@ -98,10 +113,17 @@ namespace SoulsHunter.Player
         }
 
         InputAction[] All() => new[] { move, lookMouse, lookStick, sprintKey, dodgeKey, padDodgeSprint, lockOn, lightAttack, heavyAttack,
-                                       useItem, interact, inventory };
+                                       useItem, interact, inventory, guard, pause };
 
         void Update()
         {
+            PausePressed = pause.WasPressedThisFrame();
+            if (SoulsHunter.Core.GameState.IsPaused)
+            {
+                ClearGameplayInput();
+                return;
+            }
+
             Move = Vector2.ClampMagnitude(move.ReadValue<Vector2>(), 1f);
 
             // 커서가 풀려 있을 땐(ESC) 마우스로 시점이 돌지 않게 한다.
@@ -131,6 +153,8 @@ namespace SoulsHunter.Player
             UseItemPressed = useItem.WasPressedThisFrame();
             InteractPressed = interact.WasPressedThisFrame();
             InventoryPressed = inventory.WasPressedThisFrame();
+            GuardHeld = guard.IsPressed();
+            GuardPressed = guard.WasPressedThisFrame();
         }
     }
 }

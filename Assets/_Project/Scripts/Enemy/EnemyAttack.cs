@@ -21,6 +21,8 @@ namespace SoulsHunter.Enemy
         public float weight = 1f;
         [Tooltip("한 번 쓰면 이 시간 동안 다시 안 씀")]
         public float cooldown = 0f;
+        [Tooltip("분노 페이즈에서만 쓰는 공격")]
+        public bool enragedOnly = false;
 
         [Header("피해")]
         public float damage = 25f;

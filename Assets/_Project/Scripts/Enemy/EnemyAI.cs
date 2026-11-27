@@ -47,6 +47,8 @@ namespace SoulsHunter.Enemy
             new("Slam",      0f, 5.5f,  40f, 2f,   4f, 45f, 40f, 1.30f, 0.15f, 1.6f,   0f,  0f, Vector2.zero,    new(0f, 1f, 4f),   new(4f, 2f, 4f)),
             new("Charge",    7f, 16f,   25f, 2f,   6f, 35f, 40f, 1.00f, 0.70f, 1.3f,   0f, 12f, new(1.0f, 1.7f), new(0f, 1f, 2.5f), new(3f, 2f, 2f), isDash: true),
             new("Tail Spin", 0f, 4.5f, 360f, 1.5f, 5f, 30f, 30f, 0.60f, 0.30f, 1.0f,   0f,  0f, Vector2.zero,    new(0f, 1f, 0f),   new(8f, 2f, 8f)),
+            // 분노 전용: 주변 전체를 내려찍는 충격파. 예고가 길어서 멀리 피하거나 패링으로 대응
+            new("Quake",     0f, 7f,   360f, 2.5f, 9f, 40f, 60f, 1.20f, 0.25f, 1.4f,   0f,  0f, Vector2.zero,    new(0f, 1f, 0f),   new(13f, 2.5f, 13f)) { enragedOnly = true },
         };
 
         [Header("Enrage (분노 페이즈)")]
@@ -232,8 +234,8 @@ namespace SoulsHunter.Enemy
             return null;
         }
 
-        static bool IsUsable(EnemyAttack a, float dist, float angle) =>
-            a.weight > 0f && Time.time >= a.readyTime &&
+        bool IsUsable(EnemyAttack a, float dist, float angle) =>
+            a.weight > 0f && Time.time >= a.readyTime && (!a.enragedOnly || enraged) &&
             dist >= a.minRange && dist <= a.maxRange && angle <= a.maxAngle * 0.5f + 0.01f;
 
         // ───────── 공격 ─────────

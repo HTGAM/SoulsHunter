@@ -84,6 +84,9 @@ namespace SoulsHunter.EditorTools
             player.AddComponent<PlayerFlask>();
             player.AddComponent<PlayerInteractor>();
             player.AddComponent<PlayerInventory>();
+            var shield = Visual(PrimitiveType.Cube, "Shield", player.transform, new Vector3(-0.5f, 1.0f, 0.35f), new Vector3(0.08f, 0.7f, 0.55f), MakeMaterial(new Color(0.45f, 0.32f, 0.2f)));
+            var guard = player.AddComponent<PlayerGuard>();
+            SetRef(guard, "shield", shield.transform);
 
             // 카메라
             var cam = Camera.main;
@@ -113,6 +116,7 @@ namespace SoulsHunter.EditorTools
             SetRef(hud, "playerStamina", stamina);
             SetRef(hud, "playerCamera", tpc);
             hud.gameObject.AddComponent<GameplayHUD>();
+            hud.gameObject.AddComponent<PauseMenu>();
 
             // 화톳불 (시작 지점 옆)
             BuildBonfire(new Vector3(-3f, 0f, -3f));

@@ -278,9 +278,12 @@ namespace SoulsHunter.CameraSystem
 
         void HandleCursor()
         {
+            // 일시정지 메뉴가 있으면 ESC와 커서는 메뉴가 맡는다
+            if (SoulsHunter.Core.GameState.IsPaused) return;
+
             var kb = Keyboard.current;
             var mouse = Mouse.current;
-            if (kb != null && kb.escapeKey.wasPressedThisFrame) SetCursorLocked(false);
+            if (kb != null && kb.escapeKey.wasPressedThisFrame && !SoulsHunter.Core.GameState.PauseMenuAvailable) SetCursorLocked(false);
             else if (mouse != null && mouse.leftButton.wasPressedThisFrame && Cursor.lockState != CursorLockMode.Locked)
                 SetCursorLocked(true);
         }

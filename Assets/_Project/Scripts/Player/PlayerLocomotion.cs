@@ -89,6 +89,13 @@ namespace SoulsHunter.Player
 
         Vector3 externalDisplacement;
         float stunnedUntil;
+        float frameSpeedCap = 1f;
+
+        /// <summary>
+        /// 이번 프레임만 이동 속도를 제한한다 (가드 중 느리게 등). 1보다 작으면 달리기 불가.
+        /// 이 컴포넌트보다 먼저 Update되는 쪽에서 매 프레임 호출한다. 여러 곳에서 부르면 가장 작은 값.
+        /// </summary>
+        public void LimitSpeedThisFrame(float multiplier) => frameSpeedCap = Mathf.Min(frameSpeedCap, multiplier);
 
         /// <summary>회피 시작. 인자는 백스텝 여부.</summary>
         public event Action<bool> Dodged;
@@ -135,6 +142,7 @@ namespace SoulsHunter.Player
 
             controller.Move(displacement);
             UpdateAnimator();
+            frameSpeedCap = 1f;
         }
 
         Vector3 GetCameraRelativeInput()
@@ -154,14 +162,15 @@ namespace SoulsHunter.Player
 
             // 달리기: 스태미나가 바닥나면 버튼을 뗄 때까지 다시 못 달림
             if (!input.SprintHeld) sprintLockedOut = false;
-            IsSprinting = input.SprintHeld && hasInput && !sprintLockedOut && stamina.CanUse && SpeedMultiplier >= 1f;
+            float speedMultiplier = SpeedMultiplier * frameSpeedCap;
+            IsSprinting = input.SprintHeld && hasInput && !sprintLockedOut && stamina.CanUse && speedMultiplier >= 1f;
             if (IsSprinting)
             {
                 stamina.Drain(sprintStaminaPerSecond * dt);
                 if (!stamina.CanUse) sprintLockedOut = true;
             }
 
-            float speed = (IsSprinting ? sprintSpeed : runSpeed * moveDir.magnitude) * SpeedMultiplier;
+            float speed = (IsSprinting ? sprintSpeed : runSpeed * moveDir.magnitude) * speedMultiplier;
             Vector3 targetVelocity = hasInput ? moveDir.normalized * speed : Vector3.zero;
             horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, targetVelocity, acceleration * dt);
 

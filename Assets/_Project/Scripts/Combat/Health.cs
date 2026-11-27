@@ -41,6 +41,21 @@ namespace SoulsHunter.Combat
         /// <summary>true를 반환하면 피해를 무시한다 (구르기 무적 등).</summary>
         public Func<bool> InvulnerabilityCheck;
 
+        /// <summary>
+        /// 피격 직전에 끼어든다 (가드, 패링 등). info를 고칠 수 있다.
+        /// true를 반환하면 공격을 완전히 막은 것: 피해·이벤트 없이 '맞은 것'으로 처리된다
+        /// (TakeDamage가 true를 반환하므로 공격자는 같은 공격으로 다시 때리지 않는다).
+        /// </summary>
+        public delegate bool HitInterceptor(ref DamageInfo info);
+
+        readonly System.Collections.Generic.List<HitInterceptor> interceptors = new();
+
+        public event HitInterceptor Intercept
+        {
+            add => interceptors.Add(value);
+            remove => interceptors.Remove(value);
+        }
+
         readonly System.Collections.Generic.List<Func<float, float>> damageModifiers = new();
 
         /// <summary>받는 피해량을 바꾸는 함수 (방어구 등). 등록된 순서대로 모두 적용된다.</summary>
@@ -69,6 +84,8 @@ namespace SoulsHunter.Combat
             if (IsDead) return false;
             if (InvulnerabilityCheck != null && InvulnerabilityCheck()) return false;
 
+            foreach (var intercept in interceptors)
+                if (intercept(ref info)) return true;
             foreach (var modify in damageModifiers) info.Amount = Mathf.Max(0f, modify(info.Amount));
 
             lastHitTime = Time.time;

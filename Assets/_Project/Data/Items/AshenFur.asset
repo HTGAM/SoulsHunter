@@ -1,0 +1,19 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 8bfaf898b26b1814986d0dc83e50933f, type: 3}
+  m_Name: AshenFur
+  m_EditorClassIdentifier: 
+  displayName: "\uC7BF\uBE5B \uD138"
+  description: "\uC7BF\uBE5B \uB4E4\uAC1C\uC758 \uAC70\uCE5C \uD138. \uD754\uD55C
+    \uC18C\uC7AC."
+  rarity: 1
+  maxStack: 99

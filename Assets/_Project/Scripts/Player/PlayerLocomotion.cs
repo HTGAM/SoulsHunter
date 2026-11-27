@@ -66,6 +66,12 @@ namespace SoulsHunter.Player
         Vector2 dodgeIFrames;
 
         public bool IsDodging => isDodging;
+        public bool IsBackstep => isDodging && isBackstep;
+        /// <summary>회피 진행도 0~1 (애니메이션 동기화용)</summary>
+        public float DodgeProgress => isDodging && dodgeDuration > 0f ? Mathf.Clamp01(dodgeTimer / dodgeDuration) : 0f;
+        /// <summary>회피 방향 (월드)</summary>
+        public Vector3 DodgeDirection => dodgeDirection;
+        public float RunSpeed => runSpeed;
         public bool IsSprinting { get; private set; }
         public bool IsInvulnerable => isDodging && dodgeTimer >= dodgeIFrames.x && dodgeTimer <= dodgeIFrames.y;
         public Vector3 HorizontalVelocity => horizontalVelocity;

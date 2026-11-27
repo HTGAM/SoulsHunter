@@ -135,6 +135,11 @@ namespace SoulsHunter.Player
         public AttackStep CurrentAttack => current;
         public bool InActiveFrames => IsAttacking && timer >= current.windup && timer < current.windup + current.active;
         public bool IsCharging => charging;
+        /// <summary>현재 공격 경과 시간(초). 모으기 중엔 멈춘다 (애니메이션 동기화용)</summary>
+        public float AttackTimer => timer;
+        public AttackType CurrentType => currentType;
+        public int ComboIndex => comboIndex;
+        public WeaponData EquippedWeapon => Weapon;
         public int ChargeLevel => chargeLevel;
 
         /// <summary>특수 행동(귀인화 등)이 바꾸는 피해 배율</summary>

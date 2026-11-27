@@ -213,8 +213,10 @@ namespace SoulsHunter.EditorTools
         {
             if (!model || !set) return;
             var go = (GameObject)Instantiate(model);
-            go.hideFlags = HideFlags.HideAndDontSave;
-            go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            go.hideFlags = HideFlags.DontSave | HideFlags.HideInHierarchy; // 샘플링이 되도록 편집 가능한 상태로 둔다
+            go.transform.SetPositionAndRotation(new Vector3(0f, -1000f, 0f), Quaternion.identity);
+            bool startedMode = !AnimationMode.InAnimationMode();
+            if (startedMode) AnimationMode.StartAnimationMode();
             try
             {
                 var animator = go.GetComponent<Animator>();
@@ -231,10 +233,23 @@ namespace SoulsHunter.EditorTools
                 foreach (var entry in set.attacks)
                 {
                     if (!entry.clip) continue;
-                    entry.hitPoints = FindSwingPeaks(animator, entry.clip, hand, hips);
+                    var clip = entry.clip;
+                    int samples = Mathf.Clamp(Mathf.RoundToInt(clip.length * 60f), 30, 600);
+                    float dt = clip.length / samples;
+
+                    // 1차: Animation 창과 같은 방식(AnimationMode). 안 움직이면 2차: Playable 그래프
+                    var positions = SampleWithAnimationMode(go, clip, hand, hips, samples, dt);
+                    string method = "AnimationMode";
+                    if (TotalMovement(positions) < 0.01f)
+                    {
+                        positions = SampleWithPlayables(animator, clip, hand, hips, samples, dt);
+                        method = "Playables";
+                    }
+
+                    entry.hitPoints = FindSwingPeaks(positions, dt, clip.length, out float maxSpeed);
                     if (entry.hitPoints.Count > 0) entry.impactPoint = Mathf.Clamp(entry.hitPoints[0], 0.05f, 0.95f);
                     string pts = string.Join(", ", entry.hitPoints.Select(p => p.ToString("0.00")));
-                    Log($"{entry.type,-6} {entry.clip.name,-30} {entry.hitPoints.Count}타 @ {pts}   ({ClipLabel(entry.clip)})");
+                    Log($"{entry.type,-6} {entry.hitPoints.Count}타 @ {pts,-22} 손 최고속도 {maxSpeed:0.0} m/s, 길이 {clip.length:0.00}초 [{method}]  ({ClipLabel(clip)})");
                 }
                 EditorUtility.SetDirty(set);
                 AssetDatabase.SaveAssets();
@@ -242,38 +257,73 @@ namespace SoulsHunter.EditorTools
             }
             finally
             {
+                if (startedMode) AnimationMode.StopAnimationMode();
                 DestroyImmediate(go);
             }
         }
 
-        static List<float> FindSwingPeaks(Animator animator, AnimationClip clip, Transform hand, Transform hips)
-        {
-            var result = new List<float>();
-            if (!hand || clip.length <= 0f) return result;
+        // 몸통 이동은 빼고 손이 몸 기준으로 어디 있는지
+        static Vector3 HandPoint(Transform hand, Transform hips) =>
+            hand.position - (hips ? new Vector3(hips.position.x, 0f, hips.position.z) : Vector3.zero);
 
-            var graph = UnityEngine.Playables.PlayableGraph.Create("HitPointScan");
+        static Vector3[] SampleWithAnimationMode(GameObject go, AnimationClip clip, Transform hand, Transform hips, int samples, float dt)
+        {
+            var pos = new Vector3[samples + 1];
+            for (int i = 0; i <= samples; i++)
+            {
+                AnimationMode.BeginSampling();
+                AnimationMode.SampleAnimationClip(go, clip, i * dt);
+                AnimationMode.EndSampling();
+                pos[i] = HandPoint(hand, hips);
+            }
+            return pos;
+        }
+
+        static Vector3[] SampleWithPlayables(Animator animator, AnimationClip clip, Transform hand, Transform hips, int samples, float dt)
+        {
+            var pos = new Vector3[samples + 1];
+            animator.Rebind();
+            var graph = PlayableGraph.Create("HitPointScan");
             try
             {
-                graph.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.Manual);
+                graph.SetTimeUpdateMode(DirectorUpdateMode.Manual);
                 var output = UnityEngine.Animations.AnimationPlayableOutput.Create(graph, "out", animator);
                 var playable = UnityEngine.Animations.AnimationClipPlayable.Create(graph, clip);
                 playable.SetApplyFootIK(false);
                 output.SetSourcePlayable(playable);
-
-                int samples = Mathf.Clamp(Mathf.RoundToInt(clip.length * 60f), 30, 600);
-                float dt = clip.length / samples;
-                var speed = new float[samples + 1];
-                Vector3 prev = Vector3.zero;
+                graph.Play();
                 for (int i = 0; i <= samples; i++)
                 {
                     playable.SetTime(i * dt);
                     graph.Evaluate();
-                    // 몸통 이동은 빼고 손이 몸 기준으로 얼마나 빨리 움직이는지
-                    Vector3 p = hand.position - (hips ? new Vector3(hips.position.x, 0f, hips.position.z) : Vector3.zero);
-                    if (i > 0) speed[i] = (p - prev).magnitude / dt;
-                    prev = p;
+                    pos[i] = HandPoint(hand, hips);
                 }
-                speed[0] = speed.Length > 1 ? speed[1] : 0f;
+            }
+            finally
+            {
+                graph.Destroy();
+            }
+            return pos;
+        }
+
+        static float TotalMovement(Vector3[] pos)
+        {
+            float sum = 0f;
+            for (int i = 1; i < pos.Length; i++) sum += (pos[i] - pos[i - 1]).magnitude;
+            return sum;
+        }
+
+        static List<float> FindSwingPeaks(Vector3[] positions, float dt, float length, out float maxSpeed)
+        {
+            var result = new List<float>();
+            maxSpeed = 0f;
+            if (positions.Length < 3 || length <= 0f) return result;
+            var clip = new { length };
+
+            {
+                var speed = new float[positions.Length];
+                for (int i = 1; i < positions.Length; i++) speed[i] = (positions[i] - positions[i - 1]).magnitude / dt;
+                speed[0] = speed[1];
 
                 // 살짝 부드럽게 (튀는 값 제거)
                 var smooth = new float[speed.Length];
@@ -290,6 +340,7 @@ namespace SoulsHunter.EditorTools
                 }
 
                 float max = smooth.Max();
+                maxSpeed = max;
                 if (max < 0.5f) return result; // 거의 안 움직이는 클립
                 float threshold = max * 0.55f;
                 float minGap = Mathf.Max(0.2f, clip.length * 0.12f); // 휘두르기 사이 최소 간격(초)
@@ -313,10 +364,6 @@ namespace SoulsHunter.EditorTools
                 // 너무 처음/끝에 있는 건 준비·마무리 동작이므로 제외, 최대 5타
                 result.RemoveAll(p => p < 0.08f || p > 0.92f);
                 if (result.Count > 5) result = result.Take(5).ToList();
-            }
-            finally
-            {
-                graph.Destroy();
             }
             return result;
         }

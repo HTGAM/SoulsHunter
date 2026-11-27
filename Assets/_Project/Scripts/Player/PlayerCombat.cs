@@ -99,6 +99,8 @@ namespace SoulsHunter.Player
         [SerializeField] float comboResetTime = 0.4f;
         [Tooltip("공격 버튼 선입력 유지 시간")]
         [SerializeField] float inputBuffer = 0.3f;
+        [Tooltip("켜면 공격마다 AttackStep의 스태미나를 쓴다 (소울류). 끄면 몬헌식: 공격은 스태미나를 쓰지 않는다")]
+        [SerializeField] bool attacksUseStamina = false;
         [Tooltip("모으기 최대 단계에서 이 시간이 지나면 저절로 내려친다")]
         [SerializeField] float maxChargeHold = 0.4f;
         [SerializeField] LayerMask hitMask = ~0;
@@ -223,7 +225,7 @@ namespace SoulsHunter.Player
             var combo = type == AttackType.Light ? LightCombo : HeavyCombo;
             if (combo.Count == 0) return;
             if (index >= combo.Count) index = 0;
-            if (!stamina.TryConsume(combo[index].staminaCost)) return;
+            if (attacksUseStamina && !stamina.TryConsume(combo[index].staminaCost)) return;
             Begin(combo[index], type, index);
         }
 

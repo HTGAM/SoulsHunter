@@ -8,7 +8,7 @@ namespace SoulsHunter.Player
     /// 키 배치는 코드에 정의되어 있어 별도 에셋 없이 동작한다.
     ///
     /// 키보드/마우스: WASD 이동, 마우스 시점, Space 짧게=구르기 / 길게=달리기, Q/휠클릭 락온,
-    ///                좌클릭 약공격, 우클릭 강공격(누르고 있으면 모으기), Ctrl 가드(누르는 순간 패링), F 무기 특수 행동,
+    ///                좌클릭 약공격, 우클릭 강공격(누르고 있으면 모으기), 마우스 옆 버튼 가드(누르는 순간 패링), F 무기 특수 행동,
     ///                R 회복약, E 상호작용,
     ///                Tab/I 가방, ESC 일시정지
     /// 게임패드:      왼스틱 이동, 오른스틱 시점, B(○) 짧게=구르기 / 길게=달리기, R3 락온,
@@ -86,7 +86,9 @@ namespace SoulsHunter.Player
             inventory = new InputAction("Inventory", InputActionType.Button, "<Keyboard>/tab");
             inventory.AddBinding("<Keyboard>/i");
             inventory.AddBinding("<Gamepad>/select");
-            guard = new InputAction("Guard", InputActionType.Button, "<Keyboard>/leftCtrl");
+            // 가드: 마우스 옆(엄지) 버튼 두 개 중 아무거나
+            guard = new InputAction("Guard", InputActionType.Button, "<Mouse>/backButton");
+            guard.AddBinding("<Mouse>/forwardButton");
             guard.AddBinding("<Gamepad>/leftShoulder");
             special = new InputAction("Special", InputActionType.Button, "<Keyboard>/f");
             special.AddBinding("<Gamepad>/leftTrigger");

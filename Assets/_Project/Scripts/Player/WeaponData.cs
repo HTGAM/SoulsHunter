@@ -69,11 +69,9 @@ namespace SoulsHunter.Player
         [Header("Special: Vault (조충곤)")]
         public float vaultUpVelocity = 11f;
         public float vaultForwardSpeed = 6f;
-        public float vaultStaminaCost = 18f;
 
         [Header("Special: Counter (랜스)")]
         public float counterWindow = 0.7f;
-        public float counterStaminaCost = 10f;
 
         [Header("Look")]
         public List<VisualPart> visuals = new();

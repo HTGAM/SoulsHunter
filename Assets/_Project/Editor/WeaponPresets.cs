@@ -168,7 +168,7 @@ namespace SoulsHunter.EditorTools
             w.dodgeDistanceMultiplier = 0.45f;
             w.canGuard = true; w.guardReduction = 0.95f; w.guardStaminaMultiplier = 0.55f; w.guardAngle = 170f;
             w.special = WeaponData.Special.Counter;
-            w.counterWindow = 0.7f; w.counterStaminaCost = 10f;
+            w.counterWindow = 0.7f;
             w.specialAttack = S("Counter Thrust", 50, 40, 0, 0.08f, 0.14f, 0.45f, 0.50f, 0.8f, new(0, 1.1f, 2.0f), new(1.0f, 1.0f, 3.4f), 0.10f);
             var shield = new Color(0.35f, 0.42f, 0.55f);
             w.visuals.Add(V(PrimitiveType.Cylinder, new(0.45f, 1.15f, 1.1f), new(90, 0, 0), new(0.1f, 1.4f, 0.1f), Steel));
@@ -189,7 +189,7 @@ namespace SoulsHunter.EditorTools
             w.dodgeDistanceMultiplier = 1f;
             w.canGuard = false;
             w.special = WeaponData.Special.Vault;
-            w.vaultUpVelocity = 11f; w.vaultForwardSpeed = 6f; w.vaultStaminaCost = 18f;
+            w.vaultUpVelocity = 11f; w.vaultForwardSpeed = 6f;
             var air = S("Aerial Slash", 22, 15, 0, 0.10f, 0.15f, 0.25f, 0.30f, 0.4f, new(0, 0.6f, 0.9f), new(2.4f, 2.6f, 2.4f), 0.05f);
             air.bounceOnHit = 7f;
             w.specialAttack = air;

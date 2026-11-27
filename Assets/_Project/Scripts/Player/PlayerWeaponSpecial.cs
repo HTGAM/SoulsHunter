@@ -115,7 +115,6 @@ namespace SoulsHunter.Player
         void UpdateVault(WeaponData w)
         {
             if (!input.SpecialPressed || Busy || combat.IsAttacking || !locomotion.IsGrounded) return;
-            if (!stamina.TryConsume(w.vaultStaminaCost)) return;
 
             // 입력 방향(없으면 정면)으로 뛰어오른다
             Vector3 dir = locomotion.GetIntendedFacing();
@@ -135,7 +134,6 @@ namespace SoulsHunter.Player
                 return;
             }
             if (!input.SpecialPressed || Busy || combat.IsAttacking) return;
-            if (!stamina.TryConsume(w.counterStaminaCost)) return;
 
             counterUntil = Time.time + w.counterWindow;
             locomotion.FaceTowards(locomotion.GetIntendedFacing(), 360f);

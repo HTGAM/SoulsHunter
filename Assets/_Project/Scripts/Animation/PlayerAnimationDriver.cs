@@ -69,10 +69,22 @@ namespace SoulsHunter.Animations
         void OnAttackStarted(PlayerCombat.AttackType type, int index)
         {
             currentAttack = null;
+            combat.AnimationTimeScale = 1f;
             if (!animator || !animationSet || overrides == null || !attackSlotA || !attackSlotB) return;
 
             var entry = animationSet.FindAttack(combat.EquippedWeapon, type, index);
             if (entry == null || !entry.clip) return;
+
+            // 공격 시간 전체를 클립 길이에 맞춘다 → 애니메이션이 빨리감기처럼 보이지 않고 끝까지 재생됨
+            var step = combat.CurrentAttack;
+            if (animationSet.matchAttackDurationToClip && step != null && step.Total > 0f)
+            {
+                // 예전에 만든 세트 에셋은 새 필드가 0일 수 있으므로 0이면 1로 취급
+                float clipSpeed = entry.speed > 0f ? entry.speed : 1f;
+                float setSpeed = animationSet.attackPlaybackSpeed > 0f ? animationSet.attackPlaybackSpeed : 1f;
+                float clipDuration = entry.clip.length / (setSpeed * clipSpeed);
+                combat.AnimationTimeScale = Mathf.Clamp(step.Total / clipDuration, 0.2f, 3f);
+            }
 
             // 지금 재생 중이 아닌 슬롯에 새 클립을 끼우고 그쪽으로 전환
             useSlotB = !useSlotB;

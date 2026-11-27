@@ -99,6 +99,8 @@ namespace SoulsHunter.Player
         [SerializeField] float comboResetTime = 0.4f;
         [Tooltip("공격 버튼 선입력 유지 시간")]
         [SerializeField] float inputBuffer = 0.3f;
+        [Tooltip("후딜이 이만큼(0~1) 진행된 뒤에야 다음 콤보·이동으로 넘어간다. 1이면 동작이 완전히 끝나야 함 (구르기는 예외)")]
+        [SerializeField, Range(0f, 1f)] float comboChainPoint = 0.85f;
         [Tooltip("켜면 공격마다 AttackStep의 스태미나를 쓴다 (소울류). 끄면 몬헌식: 공격은 스태미나를 쓰지 않는다")]
         [SerializeField] bool attacksUseStamina = false;
         [Tooltip("모으기 최대 단계에서 이 시간이 지나면 저절로 내려친다")]
@@ -146,6 +148,12 @@ namespace SoulsHunter.Player
         public float ExternalDamageMultiplier { get; set; } = 1f;
         /// <summary>특수 행동(귀인화 등)이 바꾸는 공격 속도 배율</summary>
         public float AttackSpeedMultiplier { get; set; } = 1f;
+
+        /// <summary>
+        /// 공격 애니메이션 길이에 맞춰 공격 시간 전체를 늘이거나 줄이는 배율 (PlayerAnimationDriver가 공격마다 설정).
+        /// 0.5면 코드에 적힌 시간보다 두 배 천천히 진행된다.
+        /// </summary>
+        public float AnimationTimeScale { get; set; } = 1f;
 
         WeaponData Weapon => weapon ? weapon.Equipped : null;
         List<AttackStep> LightCombo => Weapon && Weapon.lightCombo.Count > 0 ? Weapon.lightCombo : lightCombo;
@@ -199,7 +207,7 @@ namespace SoulsHunter.Player
                 return;
             }
 
-            if (IsAttacking) TickAttack(Time.deltaTime * AttackSpeedMultiplier);
+            if (IsAttacking) TickAttack(Time.deltaTime * AttackSpeedMultiplier * AnimationTimeScale);
 
             if (!IsAttacking && bufferedAttack.HasValue && !locomotion.IsDodging && !(flask && flask.IsDrinking))
             {
@@ -282,7 +290,8 @@ namespace SoulsHunter.Player
             if (a.chargeLevels > 0 && !chargeDone && timer + dt >= a.windup)
             {
                 bool held = currentType == AttackType.Heavy ? input.HeavyAttackHeld : input.LightAttackHeld;
-                if (held && TickCharge(a, dt)) return;
+                // 모으는 시간은 애니메이션 배율과 상관없이 실제 시간 기준
+                if (held && TickCharge(a, dt / Mathf.Max(0.01f, AnimationTimeScale))) return;
                 EndCharge();
             }
 
@@ -304,9 +313,11 @@ namespace SoulsHunter.Player
 
             if (InActiveFrames) DoHitDetection();
 
-            // 콤보 선입력이 있으면 후딜 시작 지점부터 바로 다음 공격으로
-            bool inRecovery = timer >= a.windup + a.active;
-            if (inRecovery && bufferedAttack.HasValue && currentType != AttackType.Special)
+            // 콤보 선입력은 후딜이 거의 끝날 때(comboChainPoint)까지 기다렸다가 이어진다.
+            // 애니메이션이 중간에 끊기지 않고 마무리 동작까지 보이게 하기 위함.
+            float chainTime = a.windup + a.active + a.recovery * comboChainPoint;
+            bool canChain = timer >= chainTime;
+            if (canChain && bufferedAttack.HasValue && currentType != AttackType.Special)
             {
                 var type = bufferedAttack.Value;
                 bufferedAttack = null;
@@ -314,8 +325,8 @@ namespace SoulsHunter.Player
                 return;
             }
 
-            // 캔슬 가능 구간에서 이동하면 공격 종료
-            if (timer >= a.cancelableAfter && input.Move.sqrMagnitude > 0.04f)
+            // 이동으로 끊는 것도 같은 지점부터 (구르기는 cancelableAfter부터 바로 가능)
+            if (timer >= Mathf.Max(a.cancelableAfter, chainTime) && input.Move.sqrMagnitude > 0.04f)
             {
                 EndAttack();
                 return;

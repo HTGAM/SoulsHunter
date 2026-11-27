@@ -25,15 +25,15 @@ namespace SoulsHunter.UI
 
         const float ToastDuration = 3.5f;
         const int MaxToasts = 5;
-        static readonly Color BonfireBannerColor = new(1f, 0.82f, 0.45f);
         static readonly Color HuntBannerColor = new(0.95f, 0.85f, 0.55f);
+        static readonly Color FailBannerColor = new(0.85f, 0.3f, 0.25f);
 
         Text flaskText, promptText, bannerText, inventoryText, questText;
         GameObject promptRoot, inventoryRoot;
         RectTransform toastRoot;
         Font font;
         float bannerTime = -10f;
-        Color bannerColor = BonfireBannerColor;
+        Color bannerColor = HuntBannerColor;
 
         readonly List<(Text text, float time)> toasts = new();
 
@@ -57,24 +57,33 @@ namespace SoulsHunter.UI
                 inventory.ItemAdded += OnItemAdded;
                 inventory.Changed += RefreshInventory;
             }
-            Bonfire.Rested += OnRested;
             GameEvents.Notified += AddToast;
             MonsterRewards.Slain += OnMonsterSlain;
-            QuestBoard.QuestStarted += OnQuestStarted;
-            QuestBoard.QuestEnded += OnQuestEnded;
+            HuntManager.QuestStarted += OnQuestStarted;
+            HuntManager.WaveStarted += OnWaveStarted;
+            HuntManager.QuestEnded += OnQuestEnded;
         }
 
         void OnDestroy()
         {
-            Bonfire.Rested -= OnRested;
             GameEvents.Notified -= AddToast;
             MonsterRewards.Slain -= OnMonsterSlain;
-            QuestBoard.QuestStarted -= OnQuestStarted;
-            QuestBoard.QuestEnded -= OnQuestEnded;
+            HuntManager.QuestStarted -= OnQuestStarted;
+            HuntManager.WaveStarted -= OnWaveStarted;
+            HuntManager.QuestEnded -= OnQuestEnded;
         }
 
+        // ───────── 사냥 ─────────
+
         void OnQuestStarted(HuntQuest quest) =>
-            ShowBanner($"QUEST START\n<size=36>{quest.title}</size>", HuntBannerColor);
+            ShowBanner($"QUEST START\n<size=36>{quest.title}  ·  {quest.arenaName}</size>", HuntBannerColor);
+
+        void OnWaveStarted(HuntQuest quest, int index, int count)
+        {
+            if (count <= 1) return; // 웨이브가 하나뿐이면 시작 배너로 충분
+            string label = quest.waves[index].label;
+            ShowBanner($"WAVE {index + 1} / {count}" + (string.IsNullOrEmpty(label) ? "" : $"\n<size=36>{label}</size>"), HuntBannerColor);
+        }
 
         void OnQuestEnded(HuntQuest quest, bool success, float time)
         {
@@ -83,7 +92,7 @@ namespace SoulsHunter.UI
                 ShowBanner($"QUEST CLEAR\n<size=36>{quest.title}  ·  {FormatTime(time)}</size>", HuntBannerColor);
                 AddToast($"<color=#FFD27A>{quest.title}</color> 클리어 ({FormatTime(time)})");
             }
-            else ShowBanner($"QUEST FAILED\n<size=36>{quest.title}</size>", new Color(0.85f, 0.3f, 0.25f));
+            else ShowBanner($"QUEST FAILED\n<size=36>{quest.title}</size>", FailBannerColor);
         }
 
         static string FormatTime(float seconds)
@@ -94,18 +103,34 @@ namespace SoulsHunter.UI
 
         void UpdateQuestTracker()
         {
-            var board = QuestBoard.Running;
-            var quest = board ? board.ActiveQuest : null;
-            questText.gameObject.SetActive(quest != null);
-            if (quest == null) return;
+            var m = HuntManager.Instance;
+            string text = null;
+            if (m && m.CurrentPhase == HuntManager.Phase.Idle && m.Accepted != null)
+            {
+                text = $"<b>{m.Accepted.title}</b>\n<size=20><color=#AAAAAA>출발 관문에서 출발하세요</color></size>";
+            }
+            else if (m && m.Active != null)
+            {
+                var q = m.Active;
+                string faintColor = m.Faints >= q.maxFaints - 1 && m.Faints > 0 ? "FF6A5A" : "FFFFFF";
+                var sb = new StringBuilder($"<b>{q.title}</b>\n<size=20>");
+                if (m.CurrentPhase == HuntManager.Phase.Hunting)
+                {
+                    int wave = Mathf.Max(0, m.WaveIndex) + 1;
+                    sb.Append(q.waves.Count > 1 ? $"웨이브  {wave} / {q.waves.Count}   ·   " : "");
+                    sb.Append(m.WaveIndex < 0 ? "곧 시작" : $"남은 적  {m.AliveInWave}");
+                    sb.Append('\n');
+                }
+                sb.Append($"쓰러진 횟수  <color=#{faintColor}>{m.Faints} / {q.maxFaints}</color>\n");
+                sb.Append($"경과  {FormatTime(m.Elapsed)}");
+                if (m.CurrentPhase == HuntManager.Phase.Returning)
+                    sb.Append($"\n<color=#FFD27A>안전구역 귀환까지 {Mathf.CeilToInt(m.ReturnIn)}초</color>");
+                sb.Append("</size>");
+                text = sb.ToString();
+            }
 
-            float remaining = board.Remaining;
-            string timeColor = remaining < 60f ? "FF6A5A" : "FFFFFF";
-            questText.text =
-                $"<b>{quest.title}</b>\n" +
-                $"<size=20>남은 시간  <color=#{timeColor}>{FormatTime(remaining)}</color>\n" +
-                $"토벌  {board.Kills} / {quest.requiredKills}\n" +
-                $"쓰러진 횟수  {board.Faints} / {quest.maxFaints}</size>";
+            questText.gameObject.SetActive(text != null);
+            if (text != null) questText.text = text;
         }
 
         void Update()
@@ -173,11 +198,8 @@ namespace SoulsHunter.UI
             toasts.Add((t, Time.unscaledTime));
         }
 
-        void OnRested(Bonfire bonfire, bool firstTime) =>
-            ShowBanner(firstTime ? "BONFIRE LIT" : bonfire.BonfireName, BonfireBannerColor);
-
         void OnMonsterSlain(Health monster) =>
-            ShowBanner($"HUNT COMPLETE\n<size=36>{monster.DisplayName}</size>", HuntBannerColor);
+            AddToast($"<color=#FFD27A>{monster.DisplayName}</color> 토벌!");
 
         void ShowBanner(string text, Color color)
         {

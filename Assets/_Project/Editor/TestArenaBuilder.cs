@@ -17,12 +17,24 @@ namespace SoulsHunter.EditorTools
 {
     /// <summary>
     /// 메뉴 SoulsHunter > Build Test Arena:
-    /// 현재 씬에 바닥, 플레이어(캡슐), 카메라, HUD, 허수아비(부위 판정 포함)를 만든다.
-    /// 이미 만든 적이 있으면 지우고 다시 만든다.
+    /// 현재 씬에 게임 전체를 만든다. 이미 만든 적이 있으면 지우고 다시 만든다.
+    /// - 안전구역(Hub): 퀘스트 게시판, 출발 관문, 대장간, 방어구 작업대, 훈련용 허수아비
+    /// - 위험구역(Colosseum): 원형 투기장. 퀘스트별 몬스터는 웨이브가 시작될 때만 켜진다
+    /// - 플레이어, 카메라, HUD, 사냥 관리자(HuntManager)
     /// </summary>
     public static class TestArenaBuilder
     {
-        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD", "Bonfire", "Forge", "Armor Bench", "Quest Board" };
+        // 예전 버전에서 만든 이름(Arena, Bonfire 등)도 지운다
+        static readonly string[] GeneratedRoots =
+        {
+            "Arena", "Bonfire", "Dummies",
+            "Player", "LockOnMarker", "HUD", "Forge", "Armor Bench", "Quest Board",
+            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground",
+        };
+
+        static readonly Vector3 HubSpawn = new(0f, 0f, -4f);
+        static readonly Vector3 ArenaCenter = new(0f, 0f, 200f);
+        const float ArenaRadius = 23f;
 
         [MenuItem("SoulsHunter/Delete Save Data")]
         static void DeleteSaveData()
@@ -49,22 +61,14 @@ namespace SoulsHunter.EditorTools
             var enemyMat = MakeMaterial(new Color(0.8f, 0.2f, 0.2f));
             var weakMat = MakeMaterial(new Color(0.95f, 0.45f, 0.2f));
 
-            // 환경
-            var arena = Create("Arena");
-            Primitive(PrimitiveType.Plane, "Ground", arena.transform, Vector3.zero, new Vector3(10f, 1f, 10f), groundMat);
-            Primitive(PrimitiveType.Cube, "Wall", arena.transform, new Vector3(6f, 2f, 4f), new Vector3(1f, 4f, 8f), wallMat);
-            Primitive(PrimitiveType.Cube, "Pillar A", arena.transform, new Vector3(-5f, 2.5f, 8f), new Vector3(1.5f, 5f, 1.5f), wallMat);
-            Primitive(PrimitiveType.Cube, "Pillar B", arena.transform, new Vector3(-8f, 2.5f, -3f), new Vector3(1.5f, 5f, 1.5f), wallMat);
-            var ramp = Primitive(PrimitiveType.Cube, "Ramp", arena.transform, new Vector3(0f, 0.6f, -8f), new Vector3(4f, 0.2f, 6f), wallMat);
-            ramp.transform.rotation = Quaternion.Euler(-15f, 0f, 0f);
-            var surface = arena.AddComponent<NavMeshSurface>();
-            surface.collectObjects = CollectObjects.Children;
-            surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
-            arena.AddComponent<BakeNavMeshOnAwake>();
+            // 환경: 안전구역 + 투기장
+            BuildHub(groundMat, wallMat);
+            var arenaSpawn = BuildColosseum(wallMat);
 
             // 플레이어
             var player = Create("Player");
             player.tag = "Player";
+            player.transform.position = HubSpawn;
             var cc = player.AddComponent<CharacterController>();
             cc.center = new Vector3(0f, 1f, 0f);
             cc.height = 2f;
@@ -101,7 +105,7 @@ namespace SoulsHunter.EditorTools
             if (!tpc) tpc = Undo.AddComponent<ThirdPersonCamera>(cam.gameObject);
             if (!cam.GetComponent<CameraFeedback>()) Undo.AddComponent<CameraFeedback>(cam.gameObject);
             Undo.RecordObject(cam.transform, "camera");
-            cam.transform.SetPositionAndRotation(new Vector3(0f, 2.5f, -4.5f), Quaternion.Euler(12f, 0f, 0f));
+            cam.transform.SetPositionAndRotation(HubSpawn + new Vector3(0f, 2.5f, -4.5f), Quaternion.Euler(12f, 0f, 0f));
 
             var marker = Visual(PrimitiveType.Sphere, "LockOnMarker", null, Vector3.zero, Vector3.one * 0.2f, MakeMaterial(Color.white));
             Undo.RegisterCreatedObjectUndo(marker, "marker");
@@ -120,27 +124,20 @@ namespace SoulsHunter.EditorTools
             hud.gameObject.AddComponent<PauseMenu>();
             hud.gameObject.AddComponent<DamageNumbers>();
 
-            // 화톳불 (시작 지점 옆)
-            BuildBonfire(new Vector3(-3f, 0f, -3f));
-
-            // 허수아비
-            var dummies = Create("Dummies");
-            Dummy(dummies.transform, "Dummy A", new Vector3(-3f, 0f, 7f), 1f, 150f, enemyMat);
-            Dummy(dummies.transform, "Dummy B", new Vector3(3f, 0f, 9f), 1f, 150f, enemyMat);
-            var boss = BuildBoss(dummies.transform, new Vector3(0f, 0f, 20f), enemyMat, weakMat);
-
-            // 잡몹: 잿빛 들개 (초반 강화 소재)
-            var houndMat = MakeMaterial(new Color(0.45f, 0.42f, 0.4f));
-            var houndA = BuildHound(dummies.transform, "Ashen Hound A", new Vector3(-9f, 0f, 11f), houndMat, weakMat);
-            var houndB = BuildHound(dummies.transform, "Ashen Hound B", new Vector3(9f, 0f, 12f), houndMat, weakMat);
-
-            // 대장간(무기) + 방어구 작업대 + 장비 강화 + 저장
-            BuildForge(new Vector3(3f, 0f, -4f));
-            BuildArmorBench(new Vector3(6f, 0f, -6.5f));
+            // 안전구역 시설
+            BuildForge(new Vector3(5f, 0f, 2f));
+            BuildArmorBench(new Vector3(8f, 0f, -2f));
             SetupProgression(player);
+            BuildQuestBoard(new Vector3(-4f, 0f, 3f));
+            BuildDepartureGate(new Vector3(0f, 0f, 11f));
 
-            // 퀘스트 게시판
-            BuildQuestBoard(new Vector3(-6f, 0f, -5f), boss, houndA, houndB);
+            // 훈련장 허수아비 (안전구역 왼쪽)
+            var training = Create("Training Ground");
+            Dummy(training.transform, "Dummy A", new Vector3(-10f, 0f, -3f), 1f, 150f, enemyMat);
+            Dummy(training.transform, "Dummy B", new Vector3(-12f, 0f, 1f), 1f, 150f, enemyMat);
+
+            // 퀘스트와 투기장 몬스터
+            BuildHuntContent(arenaSpawn, enemyMat, weakMat);
 
             Selection.activeGameObject = player;
             Undo.CollapseUndoOperations(group);
@@ -223,36 +220,6 @@ namespace SoulsHunter.EditorTools
             return health;
         }
 
-        static void BuildBonfire(Vector3 pos)
-        {
-            var root = Create("Bonfire");
-            root.transform.position = pos;
-            root.transform.rotation = Quaternion.Euler(0f, 45f, 0f);
-
-            Primitive(PrimitiveType.Cylinder, "Stones", root.transform, new Vector3(0f, 0.1f, 0f), new Vector3(1.2f, 0.1f, 1.2f), MakeMaterial(new Color(0.3f, 0.28f, 0.26f)));
-            var sword = Visual(PrimitiveType.Cube, "Coiled Sword", root.transform, new Vector3(0f, 0.7f, 0f), new Vector3(0.08f, 1.2f, 0.08f), MakeMaterial(new Color(0.4f, 0.35f, 0.3f)));
-            sword.transform.localRotation = Quaternion.Euler(0f, 0f, 8f);
-
-            var flameMat = MakeMaterial(new Color(1f, 0.45f, 0.1f));
-            flameMat.EnableKeyword("_EMISSION");
-            flameMat.SetColor("_EmissionColor", new Color(1f, 0.45f, 0.1f) * 3f);
-            var flame = Visual(PrimitiveType.Sphere, "Flame", root.transform, new Vector3(0f, 0.45f, 0f), new Vector3(0.5f, 0.7f, 0.5f), flameMat);
-
-            var lightGo = new GameObject("Fire Light");
-            lightGo.transform.SetParent(root.transform, false);
-            lightGo.transform.localPosition = new Vector3(0f, 1f, 0f);
-            var light = lightGo.AddComponent<Light>();
-            light.type = LightType.Point;
-            light.color = new Color(1f, 0.6f, 0.25f);
-            light.range = 8f;
-            light.intensity = 3f;
-
-            var bonfire = root.AddComponent<Bonfire>();
-            SetString(bonfire, "bonfireName", "아레나 입구");
-            SetRef(bonfire, "fireLight", light);
-            SetRef(bonfire, "flame", flame);
-        }
-
         static void BuildForge(Vector3 pos)
         {
             var root = Create("Forge");
@@ -285,12 +252,51 @@ namespace SoulsHunter.EditorTools
             EditorUtility.SetDirty(forge);
         }
 
-        /// <summary>퀘스트 게시판: 기둥 두 개 + 판자 + 의뢰서. 들개 사냥 → Ravager 토벌 순서.</summary>
-        static void BuildQuestBoard(Vector3 pos, Health boss, Health houndA, Health houndB)
+        // ───────── 안전구역 ─────────
+
+        /// <summary>안전구역: 잔디 바닥 + 낮은 울타리 + 등불. 몬스터가 없다.</summary>
+        static void BuildHub(Material groundMat, Material wallMat)
+        {
+            var hub = Create("Hub");
+            var grassMat = MakeMaterial(new Color(0.3f, 0.42f, 0.28f));
+            Primitive(PrimitiveType.Plane, "Ground", hub.transform, Vector3.zero, new Vector3(3.6f, 1f, 3.6f), grassMat);
+            Primitive(PrimitiveType.Cube, "Path", hub.transform, new Vector3(0f, 0.01f, 3.5f), new Vector3(3f, 0.02f, 14f), groundMat);
+
+            // 울타리 (네 변)
+            const float half = 17.5f;
+            for (int side = 0; side < 4; side++)
+            {
+                var rot = Quaternion.Euler(0f, side * 90f, 0f);
+                for (float x = -half; x <= half; x += 3.5f)
+                {
+                    var post = Primitive(PrimitiveType.Cube, "Fence Post", hub.transform, rot * new Vector3(x, 0.6f, half), new Vector3(0.25f, 1.2f, 0.25f), wallMat);
+                    post.transform.localRotation = rot;
+                }
+                var rail = Primitive(PrimitiveType.Cube, "Fence Rail", hub.transform, rot * new Vector3(0f, 0.9f, half), new Vector3(half * 2f, 0.12f, 0.1f), wallMat);
+                rail.transform.localRotation = rot;
+            }
+
+            // 등불
+            foreach (var pos in new[] { new Vector3(-6f, 0f, -6f), new Vector3(6f, 0f, -6f), new Vector3(-6f, 0f, 8f), new Vector3(6f, 0f, 8f) })
+            {
+                Primitive(PrimitiveType.Cylinder, "Lantern Pole", hub.transform, pos + new Vector3(0f, 1.2f, 0f), new Vector3(0.12f, 1.2f, 0.12f), wallMat);
+                var lightGo = new GameObject("Lantern Light");
+                lightGo.transform.SetParent(hub.transform, false);
+                lightGo.transform.localPosition = pos + new Vector3(0f, 2.6f, 0f);
+                var light = lightGo.AddComponent<Light>();
+                light.type = LightType.Point;
+                light.color = new Color(1f, 0.8f, 0.5f);
+                light.range = 9f;
+                light.intensity = 1.5f;
+            }
+        }
+
+        /// <summary>퀘스트 게시판: 기둥 두 개 + 판자 + 의뢰서.</summary>
+        static void BuildQuestBoard(Vector3 pos)
         {
             var root = Create("Quest Board");
             root.transform.position = pos;
-            root.transform.rotation = Quaternion.Euler(0f, 30f, 0f);
+            root.transform.rotation = Quaternion.Euler(0f, -20f, 0f);
 
             var woodMat = MakeMaterial(new Color(0.38f, 0.27f, 0.18f));
             var paperMat = MakeMaterial(new Color(0.92f, 0.87f, 0.72f));
@@ -299,22 +305,151 @@ namespace SoulsHunter.EditorTools
             Primitive(PrimitiveType.Cube, "Board", root.transform, new Vector3(0f, 1.45f, 0f), new Vector3(1.9f, 1.1f, 0.08f), woodMat);
             Visual(PrimitiveType.Cube, "Notice A", root.transform, new Vector3(-0.45f, 1.5f, -0.05f), new Vector3(0.55f, 0.7f, 0.02f), paperMat);
             Visual(PrimitiveType.Cube, "Notice B", root.transform, new Vector3(0.4f, 1.4f, -0.05f), new Vector3(0.5f, 0.6f, 0.02f), paperMat);
+            root.AddComponent<QuestBoard>();
+        }
+
+        /// <summary>출발 관문: 돌 아치. 퀘스트를 받으면 가운데가 빛난다.</summary>
+        static void BuildDepartureGate(Vector3 pos)
+        {
+            var root = Create("Departure Gate");
+            root.transform.position = pos;
+
+            var stoneMat = MakeMaterial(new Color(0.45f, 0.43f, 0.42f));
+            Primitive(PrimitiveType.Cube, "Pillar L", root.transform, new Vector3(-1.8f, 2f, 0f), new Vector3(0.8f, 4f, 0.8f), stoneMat);
+            Primitive(PrimitiveType.Cube, "Pillar R", root.transform, new Vector3(1.8f, 2f, 0f), new Vector3(0.8f, 4f, 0.8f), stoneMat);
+            Primitive(PrimitiveType.Cube, "Lintel", root.transform, new Vector3(0f, 4.3f, 0f), new Vector3(4.6f, 0.6f, 1f), stoneMat);
+
+            var glowMat = MakeMaterial(new Color(1f, 0.6f, 0.2f));
+            glowMat.EnableKeyword("_EMISSION");
+            glowMat.SetColor("_EmissionColor", new Color(1f, 0.55f, 0.15f) * 2.5f);
+            var glow = Visual(PrimitiveType.Cube, "Ready Glow", root.transform, new Vector3(0f, 2f, 0f), new Vector3(2.8f, 4f, 0.05f), glowMat);
+            var lightGo = new GameObject("Glow Light");
+            lightGo.transform.SetParent(glow.transform, false);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.6f, 0.25f);
+            light.range = 7f;
+            light.intensity = 2f;
+            glow.SetActive(false);
+
+            var gate = root.AddComponent<DepartureGate>();
+            gate.EditorSetup(glow);
+            EditorUtility.SetDirty(gate);
+        }
+
+        // ───────── 투기장 ─────────
+
+        /// <summary>
+        /// 원형 투기장 (안전구역에서 멀리 떨어진 곳). 모래 바닥 + 둥근 벽 + 엄폐용 기둥 4개 + 횃불.
+        /// 내비메시는 실행할 때 구운다. 반환값은 출발 시 플레이어가 서는 위치.
+        /// </summary>
+        static Transform BuildColosseum(Material wallMat)
+        {
+            var root = Create("Colosseum");
+            root.transform.position = ArenaCenter;
+
+            var sandMat = MakeMaterial(new Color(0.72f, 0.62f, 0.45f));
+            var darkSandMat = MakeMaterial(new Color(0.6f, 0.5f, 0.36f));
+            var stoneMat = MakeMaterial(new Color(0.5f, 0.46f, 0.42f));
+            Primitive(PrimitiveType.Cube, "Floor", root.transform, new Vector3(0f, -0.1f, 0f), new Vector3(ArenaRadius * 2f + 6f, 0.2f, ArenaRadius * 2f + 6f), darkSandMat);
+            Visual(PrimitiveType.Cylinder, "Sand Circle", root.transform, new Vector3(0f, 0.01f, 0f), new Vector3(ArenaRadius * 2f - 1f, 0.01f, ArenaRadius * 2f - 1f), sandMat);
+
+            // 둥근 벽
+            const int segments = 32;
+            float segWidth = 2f * Mathf.PI * ArenaRadius / segments + 0.3f;
+            for (int i = 0; i < segments; i++)
+            {
+                float a = i * 360f / segments;
+                var rot = Quaternion.Euler(0f, a, 0f);
+                var wall = Primitive(PrimitiveType.Cube, "Wall", root.transform, rot * new Vector3(0f, 3f, ArenaRadius + 0.5f), new Vector3(segWidth, 6f, 1f), stoneMat);
+                wall.transform.localRotation = rot;
+            }
+
+            // 엄폐용 기둥
+            for (int i = 0; i < 4; i++)
+            {
+                var rot = Quaternion.Euler(0f, 45f + i * 90f, 0f);
+                Primitive(PrimitiveType.Cube, "Pillar", root.transform, rot * new Vector3(0f, 3f, 11f), new Vector3(1.8f, 6f, 1.8f), wallMat);
+            }
+
+            // 횃불
+            var fireMat = MakeMaterial(new Color(1f, 0.45f, 0.1f));
+            fireMat.EnableKeyword("_EMISSION");
+            fireMat.SetColor("_EmissionColor", new Color(1f, 0.45f, 0.1f) * 3f);
+            for (int i = 0; i < 8; i++)
+            {
+                var rot = Quaternion.Euler(0f, i * 45f + 22.5f, 0f);
+                Vector3 p = rot * new Vector3(0f, 4.5f, ArenaRadius - 0.3f);
+                Visual(PrimitiveType.Sphere, "Torch", root.transform, p, Vector3.one * 0.4f, fireMat);
+                var lightGo = new GameObject("Torch Light");
+                lightGo.transform.SetParent(root.transform, false);
+                lightGo.transform.localPosition = p + rot * new Vector3(0f, 0f, -0.6f);
+                var light = lightGo.AddComponent<Light>();
+                light.type = LightType.Point;
+                light.color = new Color(1f, 0.6f, 0.3f);
+                light.range = 14f;
+                light.intensity = 2f;
+            }
+
+            var surface = root.AddComponent<NavMeshSurface>();
+            surface.collectObjects = CollectObjects.Children;
+            surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
+            root.AddComponent<BakeNavMeshOnAwake>();
+
+            var spawn = new GameObject("Player Spawn");
+            spawn.transform.SetParent(root.transform, false);
+            spawn.transform.localPosition = new Vector3(0f, 0f, -ArenaRadius + 5f);
+            return spawn.transform;
+        }
+
+        /// <summary>
+        /// 퀘스트 3개와 각자의 투기장 몬스터, 사냥 관리자.
+        /// 몬스터는 퀘스트마다 따로 만든다 (같은 몬스터가 여러 퀘스트에 섞이지 않게).
+        /// </summary>
+        static void BuildHuntContent(Transform arenaSpawn, Material enemyMat, Material weakMat)
+        {
+            var enemies = Create("Arena Enemies");
+            var houndMat = MakeMaterial(new Color(0.45f, 0.42f, 0.4f));
+            Vector3 c = ArenaCenter;
+
+            Transform Group(string name)
+            {
+                var g = new GameObject(name);
+                g.transform.SetParent(enemies.transform, false);
+                return g.transform;
+            }
+            Health Hound(Transform g, string name, float x, float z) => BuildHound(g, name, c + new Vector3(x, 0f, z), houndMat, weakMat);
+            Health Boss(Transform g, float x, float z) => BuildBoss(g, c + new Vector3(x, 0f, z), enemyMat, weakMat);
+
+            // 1. 들개 사냥
+            var g1 = Group("Q1 Hounds");
+            var q1Wave = new HuntWave { label = "잿빛 들개", enemies = new() { Hound(g1, "Ashen Hound A", -6f, 10f), Hound(g1, "Ashen Hound B", 6f, 10f) } };
+
+            // 2. Ravager 토벌
+            var g2 = Group("Q2 Ravager");
+            var q2Wave = new HuntWave { label = "Ravager", enemies = new() { Boss(g2, 0f, 12f) } };
+
+            // 3. 보스 러시: 들개 무리 → Ravager → Ravager + 들개
+            var g3 = Group("Q3 Boss Rush");
+            var rush1 = new HuntWave { label = "들개 무리", enemies = new() { Hound(g3, "Rush Hound 1", -7f, 9f), Hound(g3, "Rush Hound 2", 0f, 12f), Hound(g3, "Rush Hound 3", 7f, 9f) } };
+            var rush2 = new HuntWave { label = "철갑의 포식자", enemies = new() { Boss(g3, 0f, 12f) } };
+            var rush3 = new HuntWave { label = "최후의 시련", enemies = new() { Boss(g3, 0f, 14f), Hound(g3, "Rush Hound 4", -9f, 6f), Hound(g3, "Rush Hound 5", 9f, 6f) } };
 
             var fur = GetOrCreateItem("AshenFur", "잿빛 털", "잿빛 들개의 거친 털. 흔한 소재.", 1);
             var tooth = GetOrCreateItem("HoundFang", "들개 이빨", "날카로운 송곳니. 무기 강화에 쓴다.", 1);
             var scale = GetOrCreateItem("RavagerScale", "철갑 비늘", "Ravager의 단단한 비늘. 방어구 소재.", 2);
             var hide = GetOrCreateItem("RavagerHide", "철갑 가죽", "질기고 무거운 가죽.", 2);
             var gem = GetOrCreateItem("RavagerGem", "철갑의 보옥", "몸속에서 드물게 자라는 보석. 아주 귀하다.", 6);
+            var fang = GetOrCreateItem("RavagerFang", "강철 엄니", "머리를 파괴해야 얻을 수 있는 엄니.", 3);
+            var spike = GetOrCreateItem("RavagerTailSpike", "꼬리 가시", "꼬리를 파괴해야 얻을 수 있는 가시.", 3);
 
-            var board = root.AddComponent<QuestBoard>();
-            board.EditorSetup(new List<HuntQuest>
+            var quests = new List<HuntQuest>
             {
                 new()
                 {
-                    id = "hunt_hounds", title = "잿빛 들개 사냥",
-                    description = "아레나를 떠도는 잿빛 들개 두 마리를 사냥하라.",
-                    targets = new() { houndA, houndB }, requiredKills = 2,
-                    timeLimit = 600f, maxFaints = 3,
+                    id = "hunt_hounds", title = "잿빛 들개 사냥", arenaName = "투기장",
+                    description = "투기장에 풀린 잿빛 들개 두 마리를 사냥하라.",
+                    arenaSpawn = arenaSpawn, waves = new() { q1Wave }, maxFaints = 3,
                     rewards = new()
                     {
                         new() { item = fur, min = 2, max = 3 },
@@ -323,10 +458,9 @@ namespace SoulsHunter.EditorTools
                 },
                 new()
                 {
-                    id = "hunt_ravager", title = "철갑의 포식자",
+                    id = "hunt_ravager", title = "철갑의 포식자", arenaName = "투기장",
                     description = "Ravager, the Iron Maw를 토벌하라.",
-                    targets = new() { boss }, requiredKills = 1,
-                    timeLimit = 900f, maxFaints = 3,
+                    arenaSpawn = arenaSpawn, waves = new() { q2Wave }, maxFaints = 3,
                     rewards = new()
                     {
                         new() { item = scale, min = 2, max = 3 },
@@ -334,8 +468,29 @@ namespace SoulsHunter.EditorTools
                         new() { item = gem, min = 1, max = 1, chance = 0.3f },
                     },
                 },
-            });
-            EditorUtility.SetDirty(board);
+                new()
+                {
+                    id = "rush_colosseum", title = "투기장의 시련 (보스 러시)", arenaName = "투기장",
+                    description = "쉬지 않고 이어지는 세 번의 싸움을 버텨라.",
+                    arenaSpawn = arenaSpawn, waves = new() { rush1, rush2, rush3 }, maxFaints = 3,
+                    rewards = new()
+                    {
+                        new() { item = scale, min = 4, max = 5 },
+                        new() { item = hide, min = 3, max = 3 },
+                        new() { item = fang, min = 1, max = 2 },
+                        new() { item = spike, min = 1, max = 1 },
+                        new() { item = gem, min = 1, max = 1, chance = 0.6f },
+                    },
+                },
+            };
+
+            var managerGo = Create("Hunt Manager");
+            var hubSpawn = new GameObject("Hub Spawn");
+            hubSpawn.transform.SetParent(managerGo.transform, false);
+            hubSpawn.transform.position = HubSpawn;
+            var manager = managerGo.AddComponent<HuntManager>();
+            manager.EditorSetup(hubSpawn.transform, quests);
+            EditorUtility.SetDirty(manager);
         }
 
         /// <summary>방어구 작업대: 탁자 + 갑옷 걸이. 방어구를 강화한다.</summary>

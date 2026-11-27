@@ -90,6 +90,7 @@ namespace SoulsHunter.Enemy
         float timer, lungePrev, nextDecisionTime, staggerEnd;
         bool hitLanded;
         bool enraged;
+        bool forceAggro;
         Vector3 spawnPosition;
         Quaternion spawnRotation;
 
@@ -174,7 +175,7 @@ namespace SoulsHunter.Enemy
             switch (state)
             {
                 case State.Idle:
-                    if (dist <= aggroRange) EnterChase(0.5f);
+                    if (forceAggro || dist <= aggroRange) EnterChase(0.5f);
                     break;
                 case State.Chase:
                     TickChase(toTarget, dist, dt);
@@ -384,7 +385,9 @@ namespace SoulsHunter.Enemy
                 foreach (var hb in GetComponentsInChildren<Hurtbox>()) hb.ResetPart();
             }
             foreach (var a in attacks) a.readyTime = 0f;
-            agent.Warp(spawnPosition);
+            // 아직 Start 전이라 에이전트가 꺼져 있으면 위치만 옮긴다 (Start에서 켜진다)
+            if (agent.enabled && agent.isOnNavMesh) agent.Warp(spawnPosition);
+            else transform.position = spawnPosition;
             transform.rotation = spawnRotation;
             state = State.Idle;
             current = null;
@@ -398,6 +401,16 @@ namespace SoulsHunter.Enemy
             if (direction.sqrMagnitude < 0.0001f) return;
             transform.rotation = Quaternion.RotateTowards(transform.rotation, Quaternion.LookRotation(direction), maxDegrees);
         }
+
+        /// <summary>처음 상태로 되돌린다 (체력·부위·분노·위치). 투기장 웨이브 시작 시 사용.</summary>
+        public void ResetEnemy()
+        {
+            forceAggro = false;
+            ResetToSpawn();
+        }
+
+        /// <summary>거리와 상관없이 바로 플레이어를 쫓게 한다 (투기장).</summary>
+        public void ForceAggro() => forceAggro = true;
 
         void OnEnable() => GameEvents.WorldReset += OnWorldReset;
         void OnDisable() => GameEvents.WorldReset -= OnWorldReset;

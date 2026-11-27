@@ -210,7 +210,11 @@ namespace SoulsHunter.Player
             horizontalVelocity = Vector3.zero;
             verticalVelocity = 0f;
             isDodging = false;
+            Teleported?.Invoke();
         }
+
+        /// <summary>순간이동했을 때 (카메라가 바로 따라붙는다)</summary>
+        public event Action Teleported;
 
         /// <summary>이번 프레임에 추가로 이동시킬 양 (공격 전진 등). 충돌은 CharacterController가 처리한다.</summary>
         public void AddDisplacement(Vector3 delta) => externalDisplacement += delta;

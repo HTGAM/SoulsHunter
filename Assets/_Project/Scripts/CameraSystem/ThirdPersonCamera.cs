@@ -87,6 +87,20 @@ namespace SoulsHunter.CameraSystem
             currentDistance = distance;
             SetCursorLocked(true);
             if (lockMarker) lockMarker.gameObject.SetActive(false);
+            if (target && target.TryGetComponent(out PlayerLocomotion loco)) loco.Teleported += SnapBehindTarget;
+        }
+
+        /// <summary>순간이동 직후: 락온을 풀고 캐릭터 뒤로 바로 옮긴다 (멀리서 날아오지 않게).</summary>
+        public void SnapBehindTarget()
+        {
+            if (!target) return;
+            SetTarget(null);
+            yaw = target.eulerAngles.y;
+            pitch = defaultPitch;
+            pivot = target.position + Vector3.up * pivotHeight;
+            pivotVelocity = Vector3.zero;
+            currentDistance = distance;
+            recentering = false;
         }
 
         void LateUpdate()

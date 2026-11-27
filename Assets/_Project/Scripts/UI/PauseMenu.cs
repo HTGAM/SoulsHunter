@@ -5,11 +5,12 @@ using UnityEngine.UI;
 using SoulsHunter.Core;
 using SoulsHunter.Player;
 using SoulsHunter.Save;
+using SoulsHunter.World;
 
 namespace SoulsHunter.UI
 {
     /// <summary>
-    /// ESC / Start 일시정지 메뉴: 계속하기, 조작법, 저장하고 종료.
+    /// ESC / Start 일시정지 메뉴: 계속하기, 조작법, 퀘스트 포기(사냥 중), 저장하고 종료.
     /// 마우스나 게임패드(방향키 + A)로 고른다. UI는 실행 시 코드로 만든다.
     /// </summary>
     public class PauseMenu : MonoBehaviour
@@ -17,7 +18,7 @@ namespace SoulsHunter.UI
         [SerializeField] PlayerInputHandler input;
 
         GameObject root, mainPanel, controlsPanel;
-        Button resumeButton, controlsBackButton;
+        Button resumeButton, controlsButton, abandonButton, quitButton, controlsBackButton;
         Font font;
 
         const string ControlsText =
@@ -64,6 +65,10 @@ namespace SoulsHunter.UI
         {
             GameState.SetPaused(true);
             root.SetActive(true);
+            bool hunting = HuntManager.Instance && HuntManager.Instance.CurrentPhase == HuntManager.Phase.Hunting;
+            abandonButton.gameObject.SetActive(hunting);
+            if (hunting) Chain(resumeButton, controlsButton, abandonButton, quitButton);
+            else Chain(resumeButton, controlsButton, quitButton);
             ShowControls(false);
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
@@ -82,6 +87,12 @@ namespace SoulsHunter.UI
             mainPanel.SetActive(!show);
             controlsPanel.SetActive(show);
             Select(show ? controlsBackButton : resumeButton);
+        }
+
+        void AbandonQuest()
+        {
+            if (HuntManager.Instance) HuntManager.Instance.Abandon();
+            Resume();
         }
 
         void SaveAndQuit()
@@ -131,7 +142,7 @@ namespace SoulsHunter.UI
             mainPanel = new GameObject("Main", typeof(RectTransform), typeof(VerticalLayoutGroup));
             var mr = (RectTransform)mainPanel.transform;
             mr.SetParent(root.transform, false);
-            mr.sizeDelta = new Vector2(420f, 420f);
+            mr.sizeDelta = new Vector2(420f, 520f);
             var layout = mainPanel.GetComponent<VerticalLayoutGroup>();
             layout.childAlignment = TextAnchor.MiddleCenter;
             layout.spacing = 14f;
@@ -144,8 +155,9 @@ namespace SoulsHunter.UI
             ((RectTransform)title.transform).sizeDelta = new Vector2(420f, 110f);
 
             resumeButton = MakeButton(mr, "계속하기", Resume);
-            var controlsButton = MakeButton(mr, "조작법", () => ShowControls(true));
-            var quitButton = MakeButton(mr, "저장하고 종료", SaveAndQuit);
+            controlsButton = MakeButton(mr, "조작법", () => ShowControls(true));
+            abandonButton = MakeButton(mr, "퀘스트 포기", AbandonQuest);
+            quitButton = MakeButton(mr, "저장하고 종료", SaveAndQuit);
             Chain(resumeButton, controlsButton, quitButton);
 
             // 조작법

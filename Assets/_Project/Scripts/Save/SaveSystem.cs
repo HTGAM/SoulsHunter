@@ -11,9 +11,9 @@ namespace SoulsHunter.Save
 {
     /// <summary>
     /// 진행 상황 저장/불러오기 (JSON, Application.persistentDataPath/save.json).
-    /// 저장하는 것: 가방, 무기·방어구 강화 단계, 클리어한 퀘스트, 불 붙인 화톳불, 마지막으로 쉰 화톳불.
-    /// - 시작할 때 불러오고, 마지막 화톳불 앞에서 시작한다.
-    /// - 화톳불 휴식, 무기 강화 때 바로 저장. 아이템을 얻으면 잠시 뒤 자동 저장. 게임을 끌 때도 저장.
+    /// 저장하는 것: 가방, 무기·방어구 강화 단계, 클리어한 퀘스트.
+    /// - 시작할 때 불러온다 (항상 안전구역에서 시작).
+    /// - 장비 강화·퀘스트 클리어 때 바로 저장. 아이템을 얻으면 잠시 뒤 자동 저장. 게임을 끌 때도 저장.
     /// 플레이어 오브젝트에 붙인다.
     /// </summary>
     [DefaultExecutionOrder(100)] // 다른 컴포넌트가 준비된 뒤 불러온다
@@ -35,8 +35,6 @@ namespace SoulsHunter.Save
             public List<ItemEntry> items = new();
             public int weaponLevel;
             public int armorLevel;
-            public List<string> litBonfires = new();
-            public string lastBonfire = "";
             public List<string> clearedQuests = new();
         }
 
@@ -50,10 +48,7 @@ namespace SoulsHunter.Save
         PlayerInventory inventory;
         PlayerWeapon weapon;
         PlayerArmor armor;
-        PlayerDamageHandler damageHandler;
-        PlayerLocomotion locomotion;
 
-        string lastBonfire = "";
         bool loading;
         float autosaveAt = float.PositiveInfinity;
 
@@ -62,20 +57,16 @@ namespace SoulsHunter.Save
             inventory = GetComponent<PlayerInventory>();
             weapon = GetComponent<PlayerWeapon>();
             armor = GetComponent<PlayerArmor>();
-            damageHandler = GetComponent<PlayerDamageHandler>();
-            locomotion = GetComponent<PlayerLocomotion>();
         }
 
         void OnEnable()
         {
-            Bonfire.Rested += OnRested;
             GameEvents.ProgressChanged += Save;
             if (inventory) inventory.Changed += OnInventoryChanged;
         }
 
         void OnDisable()
         {
-            Bonfire.Rested -= OnRested;
             GameEvents.ProgressChanged -= Save;
             if (inventory) inventory.Changed -= OnInventoryChanged;
         }
@@ -95,12 +86,6 @@ namespace SoulsHunter.Save
             if (autosaveAt < float.PositiveInfinity) Save();
         }
 
-        void OnRested(Bonfire bonfire, bool firstTime)
-        {
-            lastBonfire = bonfire.BonfireName;
-            Save();
-        }
-
         void OnInventoryChanged()
         {
             if (!loading) autosaveAt = Time.unscaledTime + autosaveDelay;
@@ -111,18 +96,14 @@ namespace SoulsHunter.Save
         public void Save()
         {
             autosaveAt = float.PositiveInfinity;
-            var data = new SaveData { lastBonfire = lastBonfire };
+            var data = new SaveData();
 
             if (inventory)
                 foreach (var item in inventory.Items)
                     data.items.Add(new ItemEntry { id = item.name, count = inventory.Count(item) });
             if (weapon) data.weaponLevel = weapon.Level;
             if (armor) data.armorLevel = armor.Level;
-            foreach (var b in FindObjectsByType<Bonfire>(FindObjectsSortMode.None))
-                if (b.IsLit) data.litBonfires.Add(b.BonfireName);
-            foreach (var board in FindObjectsByType<QuestBoard>(FindObjectsSortMode.None))
-                foreach (var id in board.ClearedIds)
-                    if (!data.clearedQuests.Contains(id)) data.clearedQuests.Add(id);
+            if (HuntManager.Instance) data.clearedQuests.AddRange(HuntManager.Instance.ClearedIds);
 
             try
             {
@@ -171,21 +152,8 @@ namespace SoulsHunter.Save
                 if (weapon) weapon.SetLevel(data.weaponLevel);
                 if (armor) armor.SetLevel(data.armorLevel);
 
-                if (data.clearedQuests != null)
-                    foreach (var board in FindObjectsByType<QuestBoard>(FindObjectsSortMode.None))
-                        board.RestoreCleared(data.clearedQuests);
-
-                lastBonfire = data.lastBonfire ?? "";
-                foreach (var b in FindObjectsByType<Bonfire>(FindObjectsSortMode.None))
-                {
-                    if (data.litBonfires.Contains(b.BonfireName)) b.RestoreLit();
-                    if (b.BonfireName == lastBonfire && b.IsLit)
-                    {
-                        b.GetRespawnPose(out var pos, out var rot);
-                        if (damageHandler) damageHandler.SetRespawnPoint(pos, rot);
-                        if (locomotion) locomotion.Teleport(pos, rot);
-                    }
-                }
+                if (data.clearedQuests != null && HuntManager.Instance)
+                    HuntManager.Instance.RestoreCleared(data.clearedQuests);
             }
             finally
             {

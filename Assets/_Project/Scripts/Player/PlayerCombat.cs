@@ -195,6 +195,8 @@ namespace SoulsHunter.Player
         public event Action<AttackType, int> AttackStarted;
         /// <summary>공격이 무언가에 맞았을 때</summary>
         public event Action<Hurtbox, DamageInfo> HitLanded;
+        /// <summary>휘두르기(판정 구간)가 시작될 때마다. 여러 번 휘두르는 공격은 여러 번 (휘두르는 소리용)</summary>
+        public event Action SwingStarted;
         /// <summary>모으기 단계가 올라갔을 때 (단계, 최대 단계). 0이면 모으기 끝.</summary>
         public event Action<int, int> ChargeChanged;
 
@@ -352,6 +354,7 @@ namespace SoulsHunter.Player
                 if (window != activeWindow)
                 {
                     activeWindow = window;
+                    SwingStarted?.Invoke();
                     hitThisSwing.Clear();
                 }
                 DoHitDetection(hitWindows.Count > 0 ? hitWindows[window].damageScale : 1f);

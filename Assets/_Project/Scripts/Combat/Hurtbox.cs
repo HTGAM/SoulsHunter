@@ -27,6 +27,8 @@ namespace SoulsHunter.Combat
 
         /// <summary>부위 파괴 시 (부위 이름)</summary>
         public event Action<Hurtbox> Broken;
+        /// <summary>어떤 부위든 파괴됐을 때 (이펙트·소리용)</summary>
+        public static event Action<Hurtbox> AnyBroken;
 
         void Awake()
         {
@@ -49,6 +51,7 @@ namespace SoulsHunter.Combat
                 {
                     IsBroken = true;
                     Broken?.Invoke(this);
+                    AnyBroken?.Invoke(this);
                 }
             }
             return true;

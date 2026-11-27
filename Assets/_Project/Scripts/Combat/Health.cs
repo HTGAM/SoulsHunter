@@ -71,6 +71,8 @@ namespace SoulsHunter.Combat
 
         /// <summary>어떤 Health든 피해를 입었을 때 (데미지 숫자 표시 등)</summary>
         public static event Action<Health, DamageInfo> AnyDamaged;
+        /// <summary>어떤 대상이든 강인도가 깨졌을 때 (이펙트·소리용)</summary>
+        public static event Action<Health, DamageInfo> AnyStaggered;
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
         static void ResetStatics() => AnyDamaged = null;
@@ -109,6 +111,7 @@ namespace SoulsHunter.Combat
                 {
                     poise = maxPoise;
                     Staggered?.Invoke(info);
+                    AnyStaggered?.Invoke(this, info);
                 }
             }
 

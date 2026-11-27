@@ -54,6 +54,10 @@ namespace SoulsHunter.Player
         }
 
         public Transform RightHandSocket => rightHandSocket;
+
+        Transform blade;
+        /// <summary>칼날 부품 (로컬 z축 -0.5 ~ 0.5가 칼날 길이). 없으면 null</summary>
+        public Transform Blade => blade;
         public Transform LeftHandSocket => leftHandSocket;
 
         void Apply(WeaponData w)
@@ -77,6 +81,8 @@ namespace SoulsHunter.Player
             }
 
             Transform shield = null;
+            blade = null;
+            float bladeLength = 0f;
             if (w)
             {
                 foreach (var part in w.visuals)
@@ -91,6 +97,8 @@ namespace SoulsHunter.Player
                     go.transform.localScale = part.scale;
                     go.GetComponent<Renderer>().sharedMaterial = MaterialFor(part.color);
                     if (part.isShield) shield = go.transform;
+                    // 칼날 = 방패가 아닌 부품 중 가장 긴 것 (궤적 이펙트용)
+                    else if (!blade || part.scale.z > bladeLength) { blade = go.transform; bladeLength = part.scale.z; }
                 }
             }
             // 손에 붙은 방패는 가드 애니메이션이 들어 올리므로 코드로 움직이지 않는다

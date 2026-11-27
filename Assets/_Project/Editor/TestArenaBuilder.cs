@@ -128,7 +128,6 @@ namespace SoulsHunter.EditorTools
             SetupProgression(player);
             BuildQuestBoard(new Vector3(-4f, 0f, 3f));
             BuildDepartureGate(new Vector3(0f, 0f, 11f));
-            BuildWeaponRack(new Vector3(4f, 0f, 7f));
 
             // 훈련장 허수아비 (안전구역 왼쪽)
             var training = Create("Training Ground");
@@ -670,8 +669,9 @@ namespace SoulsHunter.EditorTools
                 Step(0.25f, (fang, 2), (spike, 2), (gem, 1)),
                 Step(0.25f, (wHorn, 1), (wScale, 4), (wCore, 1)),
             });
-            var weaponTypes = WeaponPresets.GetOrCreateAll();
-            weapon.EditorSetupWeapons(weaponTypes, weaponTypes[0]);
+            // 무기는 한손검 하나만 사용 (다른 무기 에셋은 남겨둠)
+            var sword = WeaponPresets.GetOrCreateAll()[0];
+            weapon.EditorSetupWeapons(new List<WeaponData> { sword }, sword);
             EditorUtility.SetDirty(weapon);
             player.AddComponent<PlayerWeaponSpecial>();
             player.AddComponent<PlayerWeaponLoadout>();

@@ -61,6 +61,10 @@ namespace SoulsHunter.EditorTools
                 if (GUILayout.Button("③ 애니메이터 만들고 씬의 Player에 적용", GUILayout.Height(28))) BuildAndApply();
                 if (GUILayout.Button("④ 공격 타격 지점 자동 찾기 (손 움직임 분석)", GUILayout.Height(28))) { log = ""; DetectHitPoints(animationSet); }
             }
+            using (new EditorGUI.DisabledScope(!animationSet))
+            {
+                if (GUILayout.Button("⑤ 검·방패 위치만 다시 맞추기", GUILayout.Height(28))) RefitSocketsOnly();
+            }
 
             EditorGUILayout.Space();
             scroll = EditorGUILayout.BeginScrollView(scroll);
@@ -809,13 +813,8 @@ namespace SoulsHunter.EditorTools
             dso.FindProperty("locomotionClipSpeeds").vector4Value = clipSpeeds;
             dso.ApplyModifiedProperties();
 
-            // 무기를 손에 붙인다. 소켓 방향은 바인드 포즈 기준 캐릭터 정면 → 어색하면 소켓을 돌려서 맞추면 됨
-            var loadout = player.GetComponent<PlayerWeaponLoadout>();
-            if (loadout && animator.isHuman)
-            {
-                SetRef(loadout, "rightHandSocket", MakeSocket(animator, HumanBodyBones.RightHand, "Weapon Socket R", player.transform));
-                SetRef(loadout, "leftHandSocket", MakeSocket(animator, HumanBodyBones.LeftHand, "Weapon Socket L", player.transform));
-            }
+            // 검은 오른손, 방패는 왼쪽 팔뚝에 붙인다
+            FitWeaponSockets(player, animator);
 
             Undo.CollapseUndoOperations(group);
             EditorSceneManager.MarkSceneDirty(player.scene);
@@ -823,16 +822,120 @@ namespace SoulsHunter.EditorTools
             Log("완료: Player에 캐릭터를 적용했어요. 씬을 저장하고 Play 해보세요.");
         }
 
-        static Transform MakeSocket(Animator animator, HumanBodyBones bone, string name, Transform root)
+        const string RightSocketName = "Weapon Socket R";
+        const string LeftSocketName = "Weapon Socket L";
+
+        /// <summary>
+        /// 무기 소켓을 손·팔 뼈에 맞춰 만든다.
+        /// - 검(오른손): 주먹 가운데, 칼날은 새끼손가락 → 검지 방향(실제로 검을 쥐었을 때의 축)
+        /// - 방패(왼팔): 팔뚝 바깥쪽, 팔뚝을 따라 붙고 앞면은 몸 바깥을 향함 (대기 자세 기준)
+        /// 무기 부품 좌표의 손잡이·방패 중심이 소켓에 오도록 Grip도 같이 맞춘다.
+        /// </summary>
+        void FitWeaponSockets(GameObject player, Animator animator)
         {
-            var hand = animator.GetBoneTransform(bone);
-            if (!hand) return null;
-            var socket = new GameObject(name).transform;
-            Undo.RegisterCreatedObjectUndo(socket.gameObject, name);
-            socket.SetParent(hand, false);
-            socket.localPosition = Vector3.zero;
-            socket.rotation = root.rotation;
-            return socket;
+            var loadout = player.GetComponent<PlayerWeaponLoadout>();
+            if (!loadout || !animator || !animator.isHuman) return;
+            Transform B(HumanBodyBones b) => animator.GetBoneTransform(b);
+            var root = player.transform;
+
+            var rHand = B(HumanBodyBones.RightHand);
+            var lHand = B(HumanBodyBones.LeftHand);
+            var lLower = B(HumanBodyBones.LeftLowerArm);
+            var chest = B(HumanBodyBones.Chest) ? B(HumanBodyBones.Chest) : B(HumanBodyBones.Spine);
+
+            (Vector3 pos, Quaternion rot)? right = null, left = null;
+
+            // 대기 자세로 잠깐 포즈를 잡고 계산 (끝나면 원래대로 돌아감)
+            bool started = !AnimationMode.InAnimationMode();
+            if (started) AnimationMode.StartAnimationMode();
+            try
+            {
+                if (animationSet && animationSet.idle)
+                {
+                    AnimationMode.BeginSampling();
+                    AnimationMode.SampleAnimationClip(animator.gameObject, animationSet.idle, 0f);
+                    AnimationMode.EndSampling();
+                }
+
+                if (rHand)
+                {
+                    var index = B(HumanBodyBones.RightIndexProximal);
+                    var little = B(HumanBodyBones.RightLittleProximal);
+                    Vector3 pos; Quaternion rot;
+                    if (index && little)
+                    {
+                        Vector3 knuckles = (index.position + little.position) * 0.5f;
+                        Vector3 blade = (index.position - little.position).normalized;      // 쥔 검의 축
+                        Vector3 finger = (knuckles - rHand.position).normalized;            // 손목 → 손가락
+                        pos = Vector3.Lerp(rHand.position, knuckles, 0.75f);                // 주먹 가운데
+                        rot = Quaternion.LookRotation(blade, Vector3.Cross(blade, finger));  // x = 손가락 방향(코등이)
+                    }
+                    else { pos = rHand.position; rot = root.rotation; }
+                    right = (rHand.InverseTransformPoint(pos), Quaternion.Inverse(rHand.rotation) * rot);
+                }
+
+                if (lLower && lHand)
+                {
+                    Vector3 along = (lHand.position - lLower.position).normalized;          // 팔꿈치 → 손목
+                    Vector3 up = Vector3.ProjectOnPlane(Vector3.up, along);
+                    if (up.sqrMagnitude < 0.01f) up = Vector3.ProjectOnPlane(root.forward, along);
+                    up.Normalize();
+                    Vector3 normal = Vector3.Cross(up, along);                              // 방패 앞면 방향 (x)
+                    Vector3 mid = Vector3.Lerp(lLower.position, lHand.position, 0.55f);
+                    Vector3 outward = Vector3.ProjectOnPlane(mid - (chest ? chest.position : root.position), Vector3.up).normalized
+                                      + root.forward * 0.3f;
+                    if (Vector3.Dot(normal, outward) < 0f) { along = -along; normal = -normal; }
+                    Vector3 pos = mid + normal * 0.07f;                                     // 팔뚝 바깥쪽
+                    Quaternion rot = Quaternion.LookRotation(along, up);                    // z = 팔뚝, y = 위, x = 앞면
+                    left = (lLower.InverseTransformPoint(pos), Quaternion.Inverse(lLower.rotation) * rot);
+                }
+            }
+            finally
+            {
+                if (started) AnimationMode.StopAnimationMode();
+            }
+
+            // 예전 소켓(무기 모델 포함)을 지우고 새로 만든다
+            foreach (var t in animator.GetComponentsInChildren<Transform>(true))
+                if (t && (t.name == RightSocketName || t.name == LeftSocketName)) Undo.DestroyObjectImmediate(t.gameObject);
+
+            Transform Make(string name, Transform parent, (Vector3 pos, Quaternion rot)? local)
+            {
+                if (!parent || local == null) return null;
+                var s = new GameObject(name).transform;
+                Undo.RegisterCreatedObjectUndo(s.gameObject, name);
+                s.SetParent(parent, false);
+                s.localPosition = local.Value.pos;
+                s.localRotation = local.Value.rot;
+                return s;
+            }
+
+            SetRef(loadout, "rightHandSocket", Make(RightSocketName, rHand, right));
+            SetRef(loadout, "leftHandSocket", Make(LeftSocketName, lLower, left));
+
+            // 한손검 부품 좌표 기준: 손잡이(코등이 바로 뒤)와 방패 중심
+            var so = new SerializedObject(loadout);
+            so.FindProperty("rightGrip").vector3Value = new Vector3(0.45f, 1.1f, 0.05f);
+            so.FindProperty("leftGrip").vector3Value = new Vector3(-0.5f, 1.0f, 0.35f);
+            so.ApplyModifiedProperties();
+            Log("무기 소켓: 검 = 오른손 주먹, 방패 = 왼쪽 팔뚝 바깥쪽");
+        }
+
+        void RefitSocketsOnly()
+        {
+            log = "";
+            var player = GameObject.FindWithTag("Player");
+            var model = player ? player.transform.Find("Model") : null;
+            var animator = model ? model.GetComponent<Animator>() : null;
+            if (!animator)
+            {
+                EditorUtility.DisplayDialog("Character Setup", "Player 아래에 Model(캐릭터)이 없어요. ③을 먼저 해주세요.", "확인");
+                return;
+            }
+            Undo.SetCurrentGroupName("Refit Weapon Sockets");
+            FitWeaponSockets(player, animator);
+            EditorSceneManager.MarkSceneDirty(player.scene);
+            Log("완료: 씬을 저장하고 Play 해보세요.");
         }
 
         static void SetRef(Object owner, string field, Object value)

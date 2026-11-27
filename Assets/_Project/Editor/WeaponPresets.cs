@@ -28,6 +28,37 @@ namespace SoulsHunter.EditorTools
             Debug.Log("[SoulsHunter] 무기 프리셋을 기본값으로 되돌렸어요.");
         }
 
+        /// <summary>
+        /// 지금 열린 씬의 플레이어 무기를 한손검 하나로 통일하고 무기 거치대를 없앤다.
+        /// (다른 무기 에셋은 지우지 않으므로 나중에 다시 목록에 넣으면 된다)
+        /// </summary>
+        [MenuItem("SoulsHunter/Use Sword And Shield Only")]
+        static void UseSwordAndShieldOnly()
+        {
+            var player = GameObject.FindWithTag("Player");
+            var weapon = player ? player.GetComponent<PlayerWeapon>() : null;
+            if (!weapon)
+            {
+                EditorUtility.DisplayDialog("SoulsHunter", "씬에 PlayerWeapon이 있는 Player가 없어요.", "확인");
+                return;
+            }
+
+            var sword = GetOrCreateAll()[0];
+            Undo.RecordObject(weapon, "Sword And Shield Only");
+            weapon.EditorSetupWeapons(new List<WeaponData> { sword }, sword);
+            EditorUtility.SetDirty(weapon);
+
+            int removed = 0;
+            foreach (var rack in Object.FindObjectsByType<SoulsHunter.World.WeaponRack>(FindObjectsInactive.Include, FindObjectsSortMode.None))
+            {
+                Undo.DestroyObjectImmediate(rack.gameObject);
+                removed++;
+            }
+
+            UnityEditor.SceneManagement.EditorSceneManager.MarkSceneDirty(player.scene);
+            Debug.Log($"[SoulsHunter] 무기를 한손검 하나로 통일했어요. 무기 거치대 {removed}개 제거. 씬을 저장하세요.");
+        }
+
         /// <summary>무기 6종 (거치대 순서). 첫 번째가 처음 드는 무기.</summary>
         public static List<WeaponData> GetOrCreateAll(bool overwrite = false)
         {

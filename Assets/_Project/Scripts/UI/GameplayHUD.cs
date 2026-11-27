@@ -85,14 +85,11 @@ namespace SoulsHunter.UI
             ShowBanner($"WAVE {index + 1} / {count}" + (string.IsNullOrEmpty(label) ? "" : $"\n<size=36>{label}</size>"), HuntBannerColor);
         }
 
-        void OnQuestEnded(HuntQuest quest, bool success, float time)
+        // 자세한 내용(랭크·보상)은 결과 화면(QuestResultScreen)이 보여준다
+        void OnQuestEnded(HuntResult result)
         {
-            if (success)
-            {
-                ShowBanner($"QUEST CLEAR\n<size=36>{quest.title}  ·  {FormatTime(time)}</size>", HuntBannerColor);
-                AddToast($"<color=#FFD27A>{quest.title}</color> 클리어 ({FormatTime(time)})");
-            }
-            else ShowBanner($"QUEST FAILED\n<size=36>{quest.title}</size>", FailBannerColor);
+            if (result.success) ShowBanner("QUEST CLEAR", HuntBannerColor);
+            else ShowBanner("QUEST FAILED", FailBannerColor);
         }
 
         static string FormatTime(float seconds)

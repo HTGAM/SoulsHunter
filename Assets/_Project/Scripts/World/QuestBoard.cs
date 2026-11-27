@@ -23,7 +23,7 @@ namespace SoulsHunter.World
                 if (!m || m.Quests.Count == 0) return "<color=#AAAAAA>받을 수 있는 퀘스트가 없어요</color>";
                 var next = m.Quests[nextIndex % m.Quests.Count];
                 string verb = m.Accepted == null ? "퀘스트 받기" : "퀘스트 바꾸기";
-                return $"{verb}: <b>{next.title}</b>{ClearMark(m, next)}\n<size=20>{Summary(next)}</size>";
+                return $"{verb}: <b>{next.title}</b>{ClearMark(m, next)}\n<size=20>{Summary(next)}{Best(m, next)}</size>";
             }
         }
 
@@ -47,6 +47,14 @@ namespace SoulsHunter.World
             m.Accept(quest);
             nextIndex = (nextIndex + 1) % m.Quests.Count;
             GameEvents.Notify($"퀘스트를 받았어요: <color=#FFD27A>{quest.title}</color>  — 출발 관문으로 가세요.");
+        }
+
+        static string Best(HuntManager m, HuntQuest q)
+        {
+            var rec = m.GetRecord(q);
+            if (rec == null || rec.bestTime < 0f) return "";
+            int s = Mathf.FloorToInt(rec.bestTime);
+            return $"\n<color=#FFD27A>최고 기록  {s / 60:00}:{s % 60:00}  ·  최고 랭크 {rec.bestRank}</color>";
         }
 
         static string ClearMark(HuntManager m, HuntQuest q) =>

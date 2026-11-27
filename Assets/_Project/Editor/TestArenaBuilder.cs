@@ -123,6 +123,7 @@ namespace SoulsHunter.EditorTools
             hud.gameObject.AddComponent<GameplayHUD>();
             hud.gameObject.AddComponent<PauseMenu>();
             hud.gameObject.AddComponent<DamageNumbers>();
+            hud.gameObject.AddComponent<QuestResultScreen>();
 
             // 안전구역 시설
             BuildForge(new Vector3(5f, 0f, 2f));
@@ -420,6 +421,7 @@ namespace SoulsHunter.EditorTools
             }
             Health Hound(Transform g, string name, float x, float z) => BuildHound(g, name, c + new Vector3(x, 0f, z), houndMat, weakMat);
             Health Boss(Transform g, float x, float z) => BuildBoss(g, c + new Vector3(x, 0f, z), enemyMat, weakMat);
+            Health Wyrm(Transform g, float x, float z) => BuildWyrm(g, c + new Vector3(x, 0f, z), weakMat);
 
             // 1. 들개 사냥
             var g1 = Group("Q1 Hounds");
@@ -433,7 +435,11 @@ namespace SoulsHunter.EditorTools
             var g3 = Group("Q3 Boss Rush");
             var rush1 = new HuntWave { label = "들개 무리", enemies = new() { Hound(g3, "Rush Hound 1", -7f, 9f), Hound(g3, "Rush Hound 2", 0f, 12f), Hound(g3, "Rush Hound 3", 7f, 9f) } };
             var rush2 = new HuntWave { label = "철갑의 포식자", enemies = new() { Boss(g3, 0f, 12f) } };
-            var rush3 = new HuntWave { label = "최후의 시련", enemies = new() { Boss(g3, 0f, 14f), Hound(g3, "Rush Hound 4", -9f, 6f), Hound(g3, "Rush Hound 5", 9f, 6f) } };
+            var rush3 = new HuntWave { label = "잿불의 비룡", enemies = new() { Wyrm(g3, 0f, 14f), Hound(g3, "Rush Hound 4", -9f, 6f), Hound(g3, "Rush Hound 5", 9f, 6f) } };
+
+            // 4. 잿불 비룡 토벌 (원거리 보스)
+            var g4 = Group("Q4 Cinder Wyrm");
+            var q4Wave = new HuntWave { label = "Cinder Wyrm", enemies = new() { Wyrm(g4, 0f, 14f) } };
 
             var fur = GetOrCreateItem("AshenFur", "잿빛 털", "잿빛 들개의 거친 털. 흔한 소재.", 1);
             var tooth = GetOrCreateItem("HoundFang", "들개 이빨", "날카로운 송곳니. 무기 강화에 쓴다.", 1);
@@ -442,6 +448,7 @@ namespace SoulsHunter.EditorTools
             var gem = GetOrCreateItem("RavagerGem", "철갑의 보옥", "몸속에서 드물게 자라는 보석. 아주 귀하다.", 6);
             var fang = GetOrCreateItem("RavagerFang", "강철 엄니", "머리를 파괴해야 얻을 수 있는 엄니.", 3);
             var spike = GetOrCreateItem("RavagerTailSpike", "꼬리 가시", "꼬리를 파괴해야 얻을 수 있는 가시.", 3);
+            var (wScale, wMembrane, wHorn, wCore) = WyrmItems();
 
             var quests = new List<HuntQuest>
             {
@@ -449,7 +456,7 @@ namespace SoulsHunter.EditorTools
                 {
                     id = "hunt_hounds", title = "잿빛 들개 사냥", arenaName = "투기장",
                     description = "투기장에 풀린 잿빛 들개 두 마리를 사냥하라.",
-                    arenaSpawn = arenaSpawn, waves = new() { q1Wave }, maxFaints = 3,
+                    arenaSpawn = arenaSpawn, waves = new() { q1Wave }, maxFaints = 3, parTime = 90f,
                     rewards = new()
                     {
                         new() { item = fur, min = 2, max = 3 },
@@ -460,7 +467,7 @@ namespace SoulsHunter.EditorTools
                 {
                     id = "hunt_ravager", title = "철갑의 포식자", arenaName = "투기장",
                     description = "Ravager, the Iron Maw를 토벌하라.",
-                    arenaSpawn = arenaSpawn, waves = new() { q2Wave }, maxFaints = 3,
+                    arenaSpawn = arenaSpawn, waves = new() { q2Wave }, maxFaints = 3, parTime = 240f,
                     rewards = new()
                     {
                         new() { item = scale, min = 2, max = 3 },
@@ -472,7 +479,7 @@ namespace SoulsHunter.EditorTools
                 {
                     id = "rush_colosseum", title = "투기장의 시련 (보스 러시)", arenaName = "투기장",
                     description = "쉬지 않고 이어지는 세 번의 싸움을 버텨라.",
-                    arenaSpawn = arenaSpawn, waves = new() { rush1, rush2, rush3 }, maxFaints = 3,
+                    arenaSpawn = arenaSpawn, waves = new() { rush1, rush2, rush3 }, maxFaints = 3, parTime = 600f,
                     rewards = new()
                     {
                         new() { item = scale, min = 4, max = 5 },
@@ -480,9 +487,28 @@ namespace SoulsHunter.EditorTools
                         new() { item = fang, min = 1, max = 2 },
                         new() { item = spike, min = 1, max = 1 },
                         new() { item = gem, min = 1, max = 1, chance = 0.6f },
+                        new() { item = wScale, min = 2, max = 3 },
+                        new() { item = wCore, min = 1, max = 1, chance = 0.5f },
+                    },
+                },
+                new()
+                {
+                    id = "hunt_wyrm", title = "잿불의 비룡", arenaName = "투기장",
+                    description = "거리를 벌리고 불을 뿜는 Cinder Wyrm을 토벌하라. 파고들어라.",
+                    arenaSpawn = arenaSpawn, waves = new() { q4Wave }, maxFaints = 3, parTime = 270f,
+                    rewards = new()
+                    {
+                        new() { item = wScale, min = 2, max = 3 },
+                        new() { item = wMembrane, min = 1, max = 1 },
+                        new() { item = wCore, min = 1, max = 1, chance = 0.3f },
                     },
                 },
             };
+
+            // 게시판 순서: 들개 → Ravager → 비룡 → 보스 러시
+            var wyrmQuest = quests[3];
+            quests.RemoveAt(3);
+            quests.Insert(2, wyrmQuest);
 
             var managerGo = Create("Hunt Manager");
             var hubSpawn = new GameObject("Hub Spawn");
@@ -605,6 +631,7 @@ namespace SoulsHunter.EditorTools
             var spike = GetOrCreateItem("RavagerTailSpike", "꼬리 가시", "꼬리를 파괴해야 얻을 수 있는 가시.", 3);
             var fur = GetOrCreateItem("AshenFur", "잿빛 털", "잿빛 들개의 거친 털. 흔한 소재.", 1);
             var tooth = GetOrCreateItem("HoundFang", "들개 이빨", "날카로운 송곳니. 무기 강화에 쓴다.", 1);
+            var (wScale, wMembrane, wHorn, wCore) = WyrmItems();
 
             static UpgradableEquipment.UpgradeStep Step(float bonus, params (ItemData item, int amount)[] costs)
             {
@@ -621,6 +648,7 @@ namespace SoulsHunter.EditorTools
                 Step(0.15f, (scale, 3), (hide, 1), (tooth, 2)),
                 Step(0.20f, (scale, 4), (fang, 1), (hide, 2)),
                 Step(0.25f, (fang, 2), (spike, 2), (gem, 1)),
+                Step(0.25f, (wHorn, 1), (wScale, 4), (wCore, 1)),
             });
             EditorUtility.SetDirty(weapon);
 
@@ -632,11 +660,12 @@ namespace SoulsHunter.EditorTools
                 Step(0.08f, (fur, 4), (hide, 2)),
                 Step(0.10f, (scale, 4), (hide, 3)),
                 Step(0.12f, (scale, 5), (spike, 1), (gem, 1)),
+                Step(0.12f, (wMembrane, 2), (wScale, 4), (wCore, 1)),
             });
             EditorUtility.SetDirty(armor);
 
             var save = player.AddComponent<SaveSystem>();
-            save.EditorSetup(new List<ItemData> { scale, hide, gem, fang, spike, fur, tooth });
+            save.EditorSetup(new List<ItemData> { scale, hide, gem, fang, spike, fur, tooth, wScale, wMembrane, wHorn, wCore });
             EditorUtility.SetDirty(save);
         }
 
@@ -655,6 +684,131 @@ namespace SoulsHunter.EditorTools
             AssetDatabase.CreateAsset(item, path);
             AssetDatabase.SaveAssets();
             return item;
+        }
+
+        static (ItemData scale, ItemData membrane, ItemData horn, ItemData core) WyrmItems() => (
+            GetOrCreateItem("WyrmScale", "잿불 비늘", "뜨겁게 달아오른 비늘. 식어도 온기가 남아 있다.", 3),
+            GetOrCreateItem("WyrmMembrane", "잿불 비막", "날개를 파괴해야 얻을 수 있는 얇고 질긴 막.", 4),
+            GetOrCreateItem("WyrmHorn", "잿불 뿔", "머리를 파괴해야 얻을 수 있는 불타는 뿔.", 4),
+            GetOrCreateItem("WyrmCore", "화염 주머니", "비룡의 불길이 시작되는 기관. 아주 귀하다.", 6));
+
+        /// <summary>
+        /// 두 번째 보스 'Cinder Wyrm'(잿불 비룡). 거리를 벌리고 화염구·낙하 화염을 쓰는 원거리형.
+        /// 가까이 붙으면 꼬리 휘두르기로 떨쳐내고 뒤로 물러난다.
+        /// 부위: 머리(약점·파괴), 날개 2(파괴), 꼬리(파괴), 다리(단단함), 몸통.
+        /// </summary>
+        static Health BuildWyrm(Transform parent, Vector3 pos, Material weakMat)
+        {
+            var wyrm = Create("Cinder Wyrm");
+            wyrm.transform.SetParent(parent, false);
+            wyrm.transform.localPosition = pos;
+            wyrm.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+
+            var health = wyrm.AddComponent<Health>();
+            SetString(health, "displayName", "Cinder Wyrm");
+            SetFloat(health, "maxHealth", 1000f);
+            SetFloat(health, "maxPoise", 100f);
+
+            var bodyMat = MakeMaterial(new Color(0.22f, 0.2f, 0.22f));
+            var wingMat = MakeMaterial(new Color(0.35f, 0.15f, 0.1f));
+            Part(wyrm.transform, PrimitiveType.Capsule, "Body", new Vector3(0f, 2.2f, 0f), new Vector3(80f, 0f, 0f), new Vector3(1.6f, 1.8f, 1.6f), bodyMat, "Body", 1f, 0f);
+            var neck = Visual(PrimitiveType.Capsule, "Neck", wyrm.transform, new Vector3(0f, 3.1f, 1.6f), new Vector3(0.6f, 0.9f, 0.6f), bodyMat);
+            neck.transform.localRotation = Quaternion.Euler(40f, 0f, 0f);
+            Part(wyrm.transform, PrimitiveType.Sphere, "Head (약점)", new Vector3(0f, 3.6f, 2.5f), Vector3.zero, new Vector3(0.9f, 0.8f, 1.2f), weakMat, "Head", 1.5f, 180f);
+            Part(wyrm.transform, PrimitiveType.Cube, "Wing L", new Vector3(-2.3f, 3f, 0f), new Vector3(0f, 0f, 15f), new Vector3(3.4f, 0.12f, 2f), wingMat, "Wing", 1.2f, 120f);
+            Part(wyrm.transform, PrimitiveType.Cube, "Wing R", new Vector3(2.3f, 3f, 0f), new Vector3(0f, 0f, -15f), new Vector3(3.4f, 0.12f, 2f), wingMat, "Wing", 1.2f, 120f);
+            Part(wyrm.transform, PrimitiveType.Capsule, "Tail", new Vector3(0f, 1.6f, -2.8f), new Vector3(70f, 0f, 0f), new Vector3(0.5f, 1.5f, 0.5f), bodyMat, "Tail", 1.1f, 140f);
+            foreach (var x in new[] { -0.6f, 0.6f })
+                Part(wyrm.transform, PrimitiveType.Cube, "Leg", new Vector3(x, 0.7f, 0.2f), Vector3.zero, new Vector3(0.45f, 1.4f, 0.45f), bodyMat, "Leg", 0.8f, 0f);
+
+            var eyeMat = MakeMaterial(Color.black);
+            eyeMat.EnableKeyword("_EMISSION");
+            var eyeL = Visual(PrimitiveType.Sphere, "Eye L", wyrm.transform, new Vector3(-0.25f, 3.8f, 3.0f), Vector3.one * 0.16f, eyeMat);
+            var eyeR = Visual(PrimitiveType.Sphere, "Eye R", wyrm.transform, new Vector3(0.25f, 3.8f, 3.0f), Vector3.one * 0.16f, eyeMat);
+
+            var lockOn = wyrm.AddComponent<LockOnTarget>();
+            SetVector(lockOn, "offset", new Vector3(0f, 2.6f, 0.8f));
+            var dummy = wyrm.AddComponent<TrainingDummy>();
+            SetFloat(dummy, "respawnTime", 6f);
+
+            var agent = wyrm.AddComponent<UnityEngine.AI.NavMeshAgent>();
+            agent.radius = 1.3f;
+            agent.height = 3.5f;
+            agent.baseOffset = 0f;
+            agent.acceleration = 20f;
+            agent.angularSpeed = 0f;
+            agent.enabled = false;
+
+            var (wScale, wMembrane, wHorn, wCore) = WyrmItems();
+            var rewards = wyrm.AddComponent<MonsterRewards>();
+            rewards.EditorSetup(
+                new List<MonsterRewards.Reward>
+                {
+                    new() { item = wScale, min = 2, max = 3 },
+                    new() { item = wCore, min = 1, max = 1, chance = 0.12f },
+                },
+                new List<MonsterRewards.PartReward>
+                {
+                    new() { partName = "Head", rewards = new() { new() { item = wHorn, min = 1, max = 1 } } },
+                    new() { partName = "Wing", rewards = new() { new() { item = wMembrane, min = 1, max = 1 } } },
+                    new() { partName = "Tail", rewards = new() { new() { item = wScale, min = 1, max = 2 } } },
+                });
+            EditorUtility.SetDirty(rewards);
+
+            EnemyAttack Ranged(EnemyAttack a, EnemyAttack.Kind kind, int count = 1, float spread = 0f, float speed = 18f,
+                               float radius = 0.55f, bool enragedOnly = false, float meteorRadius = 2.5f, float scatter = 6f)
+            {
+                a.kind = kind;
+                a.projectileCount = count;
+                a.spreadAngle = spread;
+                a.projectileSpeed = speed;
+                a.projectileRadius = radius;
+                a.muzzleOffset = new Vector3(0f, 3.4f, 3.2f);
+                a.meteorRadius = meteorRadius;
+                a.meteorScatter = scatter;
+                a.enragedOnly = enragedOnly;
+                return a;
+            }
+
+            var ai = wyrm.AddComponent<EnemyAI>();
+            ai.EditorSetup(new List<EnemyAttack>
+            {
+                //   이름          최소/최대거리  각도  가중치 쿨   피해 강인  예고   판정   빈틈  추적  전진 전진구간      판정중심           판정크기
+                new("Tail Whip",   0f, 4.5f,  360f, 3f,   3f, 22f, 25f, 0.55f, 0.25f, 0.9f, 0f,   0f, Vector2.zero, new(0f, 1f, 0f), new(7f, 2f, 7f)),
+                Ranged(new("Fireball",  3f, 28f, 35f, 3f,   0f, 28f, 20f, 0.85f, 0.1f, 0.7f, 200f, 0f, Vector2.zero, Vector3.zero, Vector3.one), EnemyAttack.Kind.Projectile, speed: 20f),
+                Ranged(new("Triple Fire", 3f, 22f, 35f, 2f, 4f, 22f, 15f, 1.0f, 0.1f, 0.9f, 160f, 0f, Vector2.zero, Vector3.zero, Vector3.one), EnemyAttack.Kind.Projectile, 3, 32f, 17f),
+                Ranged(new("Meteor Rain", 0f, 30f, 360f, 1.5f, 10f, 32f, 30f, 1.1f, 0.1f, 1.2f, 90f, 0f, Vector2.zero, Vector3.zero, Vector3.one), EnemyAttack.Kind.Meteor, 5, meteorRadius: 2.5f, scatter: 6f),
+                // 분노 전용
+                Ranged(new("Inferno",    3f, 24f, 40f, 2.5f, 6f, 22f, 15f, 1.1f, 0.1f, 1.0f, 140f, 0f, Vector2.zero, Vector3.zero, Vector3.one), EnemyAttack.Kind.Projectile, 7, 75f, 15f, enragedOnly: true),
+                Ranged(new("Firestorm",  0f, 30f, 360f, 2f, 12f, 32f, 30f, 1.3f, 0.1f, 1.4f, 90f, 0f, Vector2.zero, Vector3.zero, Vector3.one), EnemyAttack.Kind.Meteor, 10, meteorRadius: 2.2f, scatter: 10f, enragedOnly: true),
+            }, speed: 4.5f, engage: 3f, aggro: 30f, staggerTime: 1.6f, enrageAt: 0.5f, keepRange: 11f, projectile: GetOrCreateProjectileMaterial());
+            EditorUtility.SetDirty(ai);
+            SetRef(ai, "telegraphMaterial", GetOrCreateTelegraphMaterial());
+            var so = new SerializedObject(ai);
+            var arr = so.FindProperty("telegraphRenderers");
+            arr.arraySize = 2;
+            arr.GetArrayElementAtIndex(0).objectReferenceValue = eyeL.GetComponent<Renderer>();
+            arr.GetArrayElementAtIndex(1).objectReferenceValue = eyeR.GetComponent<Renderer>();
+            so.ApplyModifiedPropertiesWithoutUndo();
+            return health;
+        }
+
+        const string ProjectileMaterialPath = "Assets/_Project/Materials/EnemyFire.mat";
+
+        /// <summary>화염구·장판 폭발용 발광 머티리얼 (에셋으로 저장해서 빌드에도 포함)</summary>
+        static Material GetOrCreateProjectileMaterial()
+        {
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(ProjectileMaterialPath);
+            if (mat) return mat;
+            if (!AssetDatabase.IsValidFolder("Assets/_Project/Materials"))
+                AssetDatabase.CreateFolder("Assets/_Project", "Materials");
+            var shader = Shader.Find("Universal Render Pipeline/Lit");
+            if (!shader) shader = Shader.Find("Standard");
+            mat = EnemyProjectile.CreateGlowMaterial(shader, new Color(1f, 0.45f, 0.1f), 4f);
+            mat.name = "EnemyFire";
+            AssetDatabase.CreateAsset(mat, ProjectileMaterialPath);
+            AssetDatabase.SaveAssets();
+            return mat;
         }
 
         const string TelegraphMaterialPath = "Assets/_Project/Materials/AttackTelegraph.mat";

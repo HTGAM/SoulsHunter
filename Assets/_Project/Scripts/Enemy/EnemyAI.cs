@@ -28,6 +28,8 @@ namespace SoulsHunter.Enemy
         [SerializeField] float turnSpeed = 120f;
         [Tooltip("이 거리 안이면 멈춰서 공격을 고른다")]
         [SerializeField] float engageDistance = 4f;
+        [Tooltip("0보다 크면 원거리형: 이 거리를 유지하려 하고, 너무 가까우면 뒤로 물러난다")]
+        [SerializeField] float preferredRange = 0f;
 
         [Header("Behaviour")]
         [Tooltip("공격 사이 쉬는 시간(초) 범위")]
@@ -73,6 +75,10 @@ namespace SoulsHunter.Enemy
         [SerializeField] bool showGroundTelegraph = true;
         [Tooltip("비워두면 실행 중에 만든다. 빌드에 넣으려면 에셋으로 지정")]
         [SerializeField] Material telegraphMaterial;
+
+        [Header("Ranged (투사체 / 장판)")]
+        [Tooltip("투사체와 장판 폭발 머티리얼. 비워두면 주황색 발광 머티리얼을 만든다")]
+        [SerializeField] Material projectileMaterial;
         [SerializeField] Color telegraphAreaColor = new(1f, 0.05f, 0.02f, 0.22f);
         [SerializeField] Color telegraphFillColor = new(1f, 0.1f, 0.02f, 0.45f);
         [SerializeField] Color telegraphEdgeColor = new(1f, 0.08f, 0.04f, 0.95f);
@@ -212,7 +218,14 @@ namespace SoulsHunter.Enemy
                 if (attack != null) { StartAttack(attack); return; }
             }
 
-            if (dist > engageDistance)
+            if (preferredRange > 0f && dist < preferredRange * 0.55f)
+            {
+                // 원거리형: 너무 가까우면 플레이어 반대쪽으로 물러난다 (몸은 플레이어를 본 채로)
+                Vector3 away = dist > 0.01f ? -toTarget / dist : -transform.forward;
+                agent.isStopped = false;
+                agent.SetDestination(Feet + away * 5f);
+            }
+            else if (dist > (preferredRange > 0f ? preferredRange : engageDistance))
             {
                 agent.isStopped = false;
                 agent.SetDestination(target.position);
@@ -271,7 +284,9 @@ namespace SoulsHunter.Enemy
             var a = current;
             timer += dt * (enraged ? enrageAttackSpeed : 1f);
 
-            if (!lockFacingDuringAttack && timer < a.windup && a.trackingSpeed > 0f) Turn(toTarget, a.trackingSpeed * dt);
+            // 원거리 공격은 예고 중에 조준을 맞춘다 (근접은 설정에 따라 방향 고정)
+            bool canTrack = !lockFacingDuringAttack || a.kind != EnemyAttack.Kind.Melee;
+            if (canTrack && timer < a.windup && a.trackingSpeed > 0f) Turn(toTarget, a.trackingSpeed * dt);
 
             // 전진 (돌진 공격은 공격 시작 방향으로 일직선)
             float lunge = EffectiveLunge(a);
@@ -285,10 +300,54 @@ namespace SoulsHunter.Enemy
                 }
             }
 
-            if (!hitLanded && timer >= a.windup && timer < a.windup + a.active) CheckHit(a);
+            if (a.kind == EnemyAttack.Kind.Melee)
+            {
+                if (!hitLanded && timer >= a.windup && timer < a.windup + a.active) CheckHit(a);
+            }
+            else if (!hitLanded && timer >= a.windup)
+            {
+                hitLanded = true; // 한 번만 발사
+                FireRanged(a);
+            }
 
             if (timer >= a.Total)
                 EnterChase(Random.Range(decisionDelay.x, decisionDelay.y) * (enraged ? enrageDecisionScale : 1f));
+        }
+
+        void FireRanged(EnemyAttack a)
+        {
+            if (!target) return;
+            int count = Mathf.Max(1, a.projectileCount);
+
+            if (a.kind == EnemyAttack.Kind.Projectile)
+            {
+                Vector3 origin = Feet + transform.rotation * a.muzzleOffset;
+                Vector3 aim = target.position + Vector3.up * 1f - origin;
+                for (int i = 0; i < count; i++)
+                {
+                    float t = count > 1 ? (float)i / (count - 1) - 0.5f : 0f;
+                    Vector3 dir = Quaternion.AngleAxis(t * a.spreadAngle, Vector3.up) * aim;
+                    EnemyProjectile.Spawn(origin, dir, a.projectileSpeed, a.projectileRadius, a.projectileRange,
+                                          a.damage, a.poiseDamage, gameObject, targetHealth, projectileMaterial);
+                }
+            }
+            else if (a.kind == EnemyAttack.Kind.Meteor)
+            {
+                Vector3 center = target.position;
+                center.y = Feet.y;
+                for (int i = 0; i < count; i++)
+                {
+                    Vector3 pos = center;
+                    if (i > 0)
+                    {
+                        Vector2 r = Random.insideUnitCircle * a.meteorScatter;
+                        pos += new Vector3(r.x, 0f, r.y);
+                    }
+                    // 조금씩 시간차를 두고 터진다
+                    GroundHazard.Spawn(pos, a.meteorRadius, a.meteorDelay + i * 0.12f, a.damage, a.poiseDamage,
+                                       gameObject, targetHealth, telegraphMaterial, projectileMaterial);
+                }
+            }
         }
 
         void CheckHit(EnemyAttack a)
@@ -429,9 +488,21 @@ namespace SoulsHunter.Enemy
         {
             if (!groundTelegraph) return;
             var a = current;
-            if (state != State.Attack || a == null || timer >= a.windup + a.active)
+            bool rangedNoLane = a != null && (a.kind == EnemyAttack.Kind.Meteor ||
+                                              (a.kind == EnemyAttack.Kind.Projectile && a.projectileCount > 1));
+            if (state != State.Attack || a == null || timer >= a.windup + a.active || rangedNoLane)
             {
                 groundTelegraph.Hide();
+                return;
+            }
+
+            if (a.kind == EnemyAttack.Kind.Projectile)
+            {
+                // 화염구 한 발: 날아갈 길을 띠로 보여준다
+                const float laneLength = 14f;
+                Vector3 laneCenter = Feet + transform.forward * (laneLength * 0.5f + 1f);
+                float p = a.windup > 0f ? timer / a.windup : 1f;
+                groundTelegraph.Show(laneCenter, transform.rotation, new Vector2(a.projectileRadius * 2f, laneLength), p, timer >= a.windup);
                 return;
             }
 
@@ -478,8 +549,10 @@ namespace SoulsHunter.Enemy
 #if UNITY_EDITOR
         /// <summary>에디터 코드(테스트 아레나)에서 몬스터 종류별로 설정할 때 사용</summary>
         public void EditorSetup(List<EnemyAttack> attackList, float speed, float engage, float aggro,
-                                float staggerTime, float enrageAt)
+                                float staggerTime, float enrageAt, float keepRange = 0f, Material projectile = null)
         {
+            preferredRange = keepRange;
+            projectileMaterial = projectile;
             attacks = attackList;
             moveSpeed = speed;
             engageDistance = engage;

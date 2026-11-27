@@ -47,6 +47,34 @@ namespace SoulsHunter.Enemy
         public Vector3 hitboxCenter = new(0f, 0f, 2f);
         public Vector3 hitboxSize = new(3f, 2f, 3f);
 
+        public enum Kind
+        {
+            /// <summary>근접: 판정 시간 동안 Hitbox로 때린다</summary>
+            Melee,
+            /// <summary>투사체: 예고가 끝나는 순간 플레이어 쪽으로 발사 (여러 발이면 부채꼴)</summary>
+            Projectile,
+            /// <summary>장판(낙하): 예고가 끝나는 순간 플레이어 주변 바닥에 지연 폭발을 깐다</summary>
+            Meteor,
+        }
+
+        [Header("원거리 (Kind가 Melee가 아닐 때)")]
+        public Kind kind = Kind.Melee;
+        [Tooltip("투사체 / 장판 개수")]
+        public int projectileCount = 1;
+        [Tooltip("투사체 부채꼴 전체 각도(도)")]
+        public float spreadAngle = 30f;
+        public float projectileSpeed = 18f;
+        public float projectileRadius = 0.5f;
+        public float projectileRange = 30f;
+        [Tooltip("발사 위치 (적 로컬 좌표, 발 기준)")]
+        public Vector3 muzzleOffset = new(0f, 2f, 2f);
+        [Tooltip("장판 하나의 반지름")]
+        public float meteorRadius = 2.5f;
+        [Tooltip("장판이 깔린 뒤 터지기까지 시간(초)")]
+        public float meteorDelay = 1.3f;
+        [Tooltip("첫 장판은 플레이어 위치, 나머지는 이 반경 안에 흩어진다")]
+        public float meteorScatter = 6f;
+
         [NonSerialized] public float readyTime;
 
         public float Total => windup + active + recovery;

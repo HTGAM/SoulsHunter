@@ -36,6 +36,8 @@ namespace SoulsHunter.World
         public List<HuntWave> waves = new();
         [Tooltip("이 횟수만큼 쓰러지면 실패 (몬헌의 3수레)")]
         public int maxFaints = 3;
+        [Tooltip("이 시간(초) 안에 한 번도 안 쓰러지고 깨면 S 랭크")]
+        public float parTime = 300f;
         public List<MonsterRewards.Reward> rewards = new();
 
         public int TotalEnemies
@@ -47,6 +49,30 @@ namespace SoulsHunter.World
                 return n;
             }
         }
+    }
+
+    /// <summary>퀘스트 하나의 최고 기록</summary>
+    [Serializable]
+    public class QuestRecord
+    {
+        public string id;
+        public float bestTime = -1f;
+        public string bestRank = "";
+        public int clears;
+    }
+
+    /// <summary>퀘스트가 끝났을 때의 결과 (결과 화면에 표시)</summary>
+    public class HuntResult
+    {
+        public HuntQuest quest;
+        public bool success;
+        public float time;
+        public int faints;
+        /// <summary>S / A / B (실패면 빈 문자열)</summary>
+        public string rank = "";
+        public bool newRecord;
+        /// <summary>이번 사냥에서 얻은 아이템 (갈무리·부위 파괴·퀘스트 보상 모두)</summary>
+        public readonly List<(ItemData item, int amount)> items = new();
     }
 
     /// <summary>
@@ -92,8 +118,8 @@ namespace SoulsHunter.World
         public static event Action<HuntQuest> QuestStarted;
         /// <summary>(퀘스트, 웨이브 번호 0~, 전체 웨이브 수)</summary>
         public static event Action<HuntQuest, int, int> WaveStarted;
-        /// <summary>(퀘스트, 성공 여부, 걸린 시간)</summary>
-        public static event Action<HuntQuest, bool, float> QuestEnded;
+        /// <summary>(결과) 클리어·실패 직후</summary>
+        public static event Action<HuntResult> QuestEnded;
         /// <summary>안전구역으로 돌아왔을 때</summary>
         public static event Action Returned;
 
@@ -105,6 +131,11 @@ namespace SoulsHunter.World
 
         readonly HashSet<Health> alive = new();
         readonly HashSet<string> cleared = new();
+        readonly Dictionary<string, QuestRecord> records = new();
+        readonly List<(ItemData item, int amount)> gained = new();
+
+        public IEnumerable<QuestRecord> Records => records.Values;
+        public QuestRecord GetRecord(HuntQuest q) => q != null && records.TryGetValue(q.id, out var r) ? r : null;
         float startTime, endTime, returnAt;
         Coroutine flow;
 
@@ -132,6 +163,7 @@ namespace SoulsHunter.World
                 locomotion = player.GetComponent<PlayerLocomotion>();
                 inventory = player.GetComponent<PlayerInventory>();
                 if (playerHealth) playerHealth.Died += OnPlayerDied;
+                if (inventory) inventory.ItemAdded += OnItemAdded;
             }
             SetHubRespawn();
             HideAllEnemies();
@@ -141,7 +173,16 @@ namespace SoulsHunter.World
         {
             if (Instance == this) Instance = null;
             if (playerHealth) playerHealth.Died -= OnPlayerDied;
+            if (inventory) inventory.ItemAdded -= OnItemAdded;
             GameState.QuestActive = false;
+        }
+
+        void OnItemAdded(ItemData item, int amount)
+        {
+            if (CurrentPhase == Phase.Idle) return;
+            for (int i = 0; i < gained.Count; i++)
+                if (gained[i].item == item) { gained[i] = (item, gained[i].amount + amount); return; }
+            gained.Add((item, amount));
         }
 
         // ───────── 안전구역 ─────────
@@ -171,6 +212,7 @@ namespace SoulsHunter.World
             WaveIndex = -1;
             startTime = Time.time;
             endTime = 0f;
+            gained.Clear();
 
             HideAllEnemies();
             RefillPlayer();
@@ -251,7 +293,19 @@ namespace SoulsHunter.World
             endTime = Time.time;
             cleared.Add(Active.id);
             GiveRewards(Active);
-            QuestEnded?.Invoke(Active, true, Elapsed);
+
+            var result = MakeResult(true);
+            result.rank = RankFor(Active, result.time, Faints);
+            if (!records.TryGetValue(Active.id, out var rec)) records[Active.id] = rec = new QuestRecord { id = Active.id };
+            rec.clears++;
+            if (rec.bestTime < 0f || result.time < rec.bestTime)
+            {
+                result.newRecord = rec.bestTime >= 0f; // 첫 클리어는 '신기록'으로 치지 않는다
+                rec.bestTime = result.time;
+            }
+            if (RankValue(result.rank) > RankValue(rec.bestRank)) rec.bestRank = result.rank;
+
+            QuestEnded?.Invoke(result);
             GameEvents.RaiseProgressChanged();
             BeginReturn(clearReturnDelay);
         }
@@ -259,10 +313,27 @@ namespace SoulsHunter.World
         void Fail()
         {
             endTime = Time.time;
-            QuestEnded?.Invoke(Active, false, Elapsed);
+            QuestEnded?.Invoke(MakeResult(false));
             SetHubRespawn(); // 쓰러진 채로 실패했다면 안전구역에서 일어난다
             BeginReturn(failReturnDelay);
         }
+
+        HuntResult MakeResult(bool success)
+        {
+            var r = new HuntResult { quest = Active, success = success, time = Elapsed, faints = Faints };
+            r.items.AddRange(gained);
+            return r;
+        }
+
+        /// <summary>S: 안 쓰러지고 기준 시간 안 / A: 1번 이하로 쓰러지고 기준의 1.6배 안 / B: 그 외</summary>
+        public static string RankFor(HuntQuest q, float time, int faints)
+        {
+            if (faints == 0 && time <= q.parTime) return "S";
+            if (faints <= 1 && time <= q.parTime * 1.6f) return "A";
+            return "B";
+        }
+
+        static int RankValue(string rank) => rank switch { "S" => 3, "A" => 2, "B" => 1, _ => 0 };
 
         /// <summary>퀘스트 포기 (일시정지 메뉴)</summary>
         public void Abandon()
@@ -352,6 +423,18 @@ namespace SoulsHunter.World
         {
             cleared.Clear();
             foreach (var id in ids) if (!string.IsNullOrEmpty(id)) cleared.Add(id);
+        }
+
+        /// <summary>저장 데이터로 최고 기록을 되돌린다.</summary>
+        public void RestoreRecords(IEnumerable<QuestRecord> list)
+        {
+            records.Clear();
+            foreach (var r in list)
+            {
+                if (r == null || string.IsNullOrEmpty(r.id)) continue;
+                records[r.id] = r;
+                if (r.clears > 0) cleared.Add(r.id);
+            }
         }
 
         [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]

@@ -11,7 +11,7 @@ namespace SoulsHunter.Save
 {
     /// <summary>
     /// 진행 상황 저장/불러오기 (JSON, Application.persistentDataPath/save.json).
-    /// 저장하는 것: 가방, 무기·방어구 강화 단계, 클리어한 퀘스트.
+    /// 저장하는 것: 가방, 무기·방어구 강화 단계, 클리어한 퀘스트와 최고 기록(시간·랭크).
     /// - 시작할 때 불러온다 (항상 안전구역에서 시작).
     /// - 장비 강화·퀘스트 클리어 때 바로 저장. 아이템을 얻으면 잠시 뒤 자동 저장. 게임을 끌 때도 저장.
     /// 플레이어 오브젝트에 붙인다.
@@ -36,6 +36,7 @@ namespace SoulsHunter.Save
             public int weaponLevel;
             public int armorLevel;
             public List<string> clearedQuests = new();
+            public List<QuestRecord> questRecords = new();
         }
 
         [Serializable]
@@ -103,7 +104,11 @@ namespace SoulsHunter.Save
                     data.items.Add(new ItemEntry { id = item.name, count = inventory.Count(item) });
             if (weapon) data.weaponLevel = weapon.Level;
             if (armor) data.armorLevel = armor.Level;
-            if (HuntManager.Instance) data.clearedQuests.AddRange(HuntManager.Instance.ClearedIds);
+            if (HuntManager.Instance)
+            {
+                data.clearedQuests.AddRange(HuntManager.Instance.ClearedIds);
+                data.questRecords.AddRange(HuntManager.Instance.Records);
+            }
 
             try
             {
@@ -152,8 +157,11 @@ namespace SoulsHunter.Save
                 if (weapon) weapon.SetLevel(data.weaponLevel);
                 if (armor) armor.SetLevel(data.armorLevel);
 
-                if (data.clearedQuests != null && HuntManager.Instance)
-                    HuntManager.Instance.RestoreCleared(data.clearedQuests);
+                if (HuntManager.Instance)
+                {
+                    if (data.clearedQuests != null) HuntManager.Instance.RestoreCleared(data.clearedQuests);
+                    if (data.questRecords != null) HuntManager.Instance.RestoreRecords(data.questRecords);
+                }
             }
             finally
             {

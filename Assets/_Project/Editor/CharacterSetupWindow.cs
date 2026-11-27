@@ -129,12 +129,21 @@ namespace SoulsHunter.EditorTools
                 set = CreateInstance<CharacterAnimationSet>();
                 AssetDatabase.CreateAsset(set, SetPath);
             }
+            // 처음부터 다시 분류
+            foreach (var f in typeof(CharacterAnimationSet).GetFields())
+                if (f.FieldType == typeof(AnimationClip)) f.SetValue(set, null);
             set.attacks.Clear();
 
-            var lights = new List<(string key, AnimationClip clip)>();
-            var heavies = new List<(string key, AnimationClip clip)>();
+            var lights = new List<AnimationClip>();
+            var heavies = new List<AnimationClip>();
+            var moves = new List<(AnimationClip clip, string name)>();
+            var impacts = new List<AnimationClip>();
+            var blocks = new List<AnimationClip>();
 
-            foreach (var path in AnimationFiles())
+            // "idle" → "idle (2)" → "idle (3)" 순서가 되도록 정렬 (번호 없는 기본 동작 우선)
+            var files = AnimationFiles().OrderBy(p => BaseName(p)).ThenBy(p => SuffixNumber(p));
+
+            foreach (var path in files)
             {
                 string file = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
                 foreach (var clip in AssetDatabase.LoadAllAssetsAtPath(path).OfType<AnimationClip>())
@@ -142,67 +151,160 @@ namespace SoulsHunter.EditorTools
                     if (clip.name.StartsWith("__preview__")) continue;
                     string key = file + " " + clip.name.ToLowerInvariant();
                     string slot = Classify(key);
+                    string label = $"{Path.GetFileName(path)}";
                     switch (slot)
                     {
-                        case "light": lights.Add((key, clip)); break;
-                        case "heavy": heavies.Add((key, clip)); break;
-                        case null: Log($"분류 못 함 (직접 넣어주세요): {Path.GetFileName(path)} / {clip.name}"); continue;
+                        case null: Log($"  분류 못 함: {label}"); continue;
+                        case "skip": Log($"  안 씀:     {label}"); continue;
+                        case "light": lights.Add(clip); break;
+                        case "heavy": heavies.Add(clip); break;
+                        case "move": moves.Add((clip, key)); continue; // 아래에서 방향으로 분류
+                        case "impact": impacts.Add(clip); break;
+                        case "block": blocks.Add(clip); break;
                         default:
-                            var field = typeof(CharacterAnimationSet).GetField(slot);
-                            if (field.GetValue(set) is AnimationClip existing && existing)
-                            {
-                                Log($"{slot}: 이미 {existing.name} 있음 → {clip.name} 건너뜀");
-                                continue;
-                            }
-                            field.SetValue(set, clip);
+                            if (!TryAssign(set, slot, clip)) { Log($"  중복:     {label} ({slot} 이미 있음)"); continue; }
                             break;
                     }
-                    Log($"{slot,-12} ← {clip.name}  ({Path.GetFileName(path)})");
+                    Log($"{slot,-11} ← {label}");
                 }
             }
 
-            foreach (var (_, clip) in lights.OrderBy(l => l.key))
-                set.attacks.Add(new CharacterAnimationSet.AttackClip { type = PlayerCombat.AttackType.Light, clip = clip });
-            foreach (var (_, clip) in heavies.OrderBy(h => h.key))
-                set.attacks.Add(new CharacterAnimationSet.AttackClip { type = PlayerCombat.AttackType.Heavy, clip = clip });
+            AssignMoves(set, moves);
+
+            // 피격 여러 개: 첫째 = 피격, 둘째 = 경직
+            if (impacts.Count > 0) TryAssign(set, "hit", impacts[0]);
+            if (impacts.Count > 1) TryAssign(set, "stagger", impacts[1]);
+            // 막기 동작(반복 아닌 것): 첫째 = 패링, 둘째 = 가드 붕괴
+            if (blocks.Count > 0) TryAssign(set, "parry", blocks[0]);
+            if (blocks.Count > 1) TryAssign(set, "guardBreak", blocks[1]);
+
+            // 한쪽 공격이 하나도 없으면 다른 쪽과 나눠 쓴다
+            if (lights.Count == 0) lights.AddRange(heavies);
+            if (heavies.Count == 0) heavies.AddRange(lights);
+            foreach (var clip in lights)
+                set.attacks.Add(new CharacterAnimationSet.AttackClip { type = PlayerCombat.AttackType.Light, clip = clip, impactPoint = 0.4f });
+            foreach (var clip in heavies)
+                set.attacks.Add(new CharacterAnimationSet.AttackClip { type = PlayerCombat.AttackType.Heavy, clip = clip, impactPoint = 0.45f });
 
             EditorUtility.SetDirty(set);
             AssetDatabase.SaveAssets();
-            Log($"완료: 약공격 {lights.Count}개, 강공격 {heavies.Count}개. 세트 에셋에서 타격 지점(Impact Point)을 조정하세요.");
+
+            Log("\n── 결과 ──");
+            foreach (var f in typeof(CharacterAnimationSet).GetFields().Where(f => f.FieldType == typeof(AnimationClip)))
+            {
+                var c = (AnimationClip)f.GetValue(set);
+                Log($"{f.Name,-12} {(c ? ClipLabel(c) : "(없음)")}");
+            }
+            Log($"약공격 {lights.Count}개, 강공격 {heavies.Count}개");
+            Log("세트 에셋에서 공격마다 타격 지점(Impact Point)을 조정할 수 있어요.");
             Selection.activeObject = set;
             return set;
         }
 
+        static bool TryAssign(CharacterAnimationSet set, string slot, AnimationClip clip)
+        {
+            var field = typeof(CharacterAnimationSet).GetField(slot);
+            if (field == null || (field.GetValue(set) is AnimationClip existing && existing)) return false;
+            field.SetValue(set, clip);
+            return true;
+        }
+
+        static string ClipLabel(AnimationClip c) => Path.GetFileName(AssetDatabase.GetAssetPath(c));
+
+        /// <summary>
+        /// 걷기/달리기/옆걸음: 이름에 방향이 없는 경우가 많아서(“strafe (2)”)
+        /// 애니메이션이 실제로 움직이는 방향과 속도(루트 모션)로 분류한다.
+        /// </summary>
+        void AssignMoves(CharacterAnimationSet set, List<(AnimationClip clip, string name)> moves)
+        {
+            var fwd = new List<(AnimationClip c, float speed, string name)>();
+            var back = new List<(AnimationClip c, float speed, string name)>();
+            var left = new List<(AnimationClip c, float speed, string name)>();
+            var right = new List<(AnimationClip c, float speed, string name)>();
+
+            foreach (var (clip, name) in moves)
+            {
+                Vector3 v = clip.averageSpeed;
+                float speed = new Vector2(v.x, v.z).magnitude;
+                string dir;
+                if (speed < 0.05f) dir = Has(name, "back") ? "back" : Has(name, "left") ? "left" : Has(name, "right") ? "right" : "fwd";
+                else if (Mathf.Abs(v.z) >= Mathf.Abs(v.x)) dir = v.z > 0f ? "fwd" : "back";
+                else dir = v.x > 0f ? "right" : "left";
+
+                (dir switch { "fwd" => fwd, "back" => back, "left" => left, _ => right }).Add((clip, speed, name));
+                Log($"{"이동",-11} ← {ClipLabel(clip)}  방향 {dir}, 속도 {speed:0.00} m/s");
+            }
+
+            if (moves.Count > 0 && moves.All(m => m.clip.averageSpeed.sqrMagnitude < 0.0025f))
+                Log("경고: 이동 애니메이션의 루트 모션이 없어요. ① 버튼을 먼저 눌렀는지 확인하세요 (In Place 클립이면 이름으로만 분류됨).");
+
+            // 앞: 가장 느린 것 = 걷기, 가장 빠른 것 = 달리기, 그보다 훨씬 빠르면 전력 질주
+            fwd.Sort((a, b) => a.speed.CompareTo(b.speed));
+            if (fwd.Count == 1)
+                TryAssign(set, Has(fwd[0].name, "walk") ? "walk" : "run", fwd[0].c);
+            else if (fwd.Count >= 2)
+            {
+                TryAssign(set, "walk", fwd[0].c);
+                var fastest = fwd[^1];
+                var second = fwd[^2];
+                if (fwd.Count >= 3 && fastest.speed > second.speed * 1.35f)
+                {
+                    TryAssign(set, "sprint", fastest.c);
+                    TryAssign(set, "run", second.c);
+                }
+                else TryAssign(set, "run", fastest.c);
+            }
+
+            // 뒤/옆: 블렌드 트리에서 달리기 속도 위치에 두므로 가장 빠른 것
+            if (back.Count > 0) TryAssign(set, "runBackward", back.OrderBy(x => x.speed).Last().c);
+            if (left.Count > 0) TryAssign(set, "strafeLeft", left.OrderBy(x => x.speed).Last().c);
+            if (right.Count > 0) TryAssign(set, "strafeRight", right.OrderBy(x => x.speed).Last().c);
+        }
+
+        static string BaseName(string path)
+        {
+            string n = Path.GetFileNameWithoutExtension(path).ToLowerInvariant();
+            int i = n.LastIndexOf(" (");
+            return i > 0 && n.EndsWith(")") ? n.Substring(0, i) : n;
+        }
+
+        static int SuffixNumber(string path)
+        {
+            string n = Path.GetFileNameWithoutExtension(path);
+            int i = n.LastIndexOf(" (");
+            return i > 0 && n.EndsWith(")") && int.TryParse(n.Substring(i + 2, n.Length - i - 3), out int k) ? k : 1;
+        }
+
         static bool Has(string s, params string[] words) => words.Any(s.Contains);
 
-        /// <summary>파일/클립 이름으로 슬롯을 추측한다 (Mixamo 이름 기준).</summary>
+        /// <summary>
+        /// 파일/클립 이름으로 분류한다 (Mixamo 이름 기준).
+        /// "move"는 방향을 루트 모션으로 다시 판단하고, "skip"은 쓰지 않는 동작이다.
+        /// </summary>
         static string Classify(string n)
         {
-            if (Has(n, "death", "dying", "die")) return "death";
+            if (Has(n, "crouch", "draw sword", "sheath", "turn", "casting", "power up", "kick", "t-pose", "tpose")) return "skip";
+            if (Has(n, "death", "dying")) return "death";
             if (Has(n, "drink", "potion")) return "drink";
             if (Has(n, "parry")) return "parry";
-            if (Has(n, "block", "guard") && Has(n, "impact", "hit", "break")) return "guardBreak";
-            if (Has(n, "block", "guard")) return "guard";
             if (Has(n, "counter")) return "counter";
+            if (Has(n, "block", "guard")) return Has(n, "idle") ? "guard" : "block";
             if (Has(n, "backstep", "step back", "hop back") || (Has(n, "dodge", "step") && Has(n, "back"))) return "backstep";
             if (Has(n, "roll", "dodge", "dive")) return "roll";
             if (Has(n, "stagger", "knock", "stumble")) return "stagger";
-            if (Has(n, "hit", "impact", "react")) return "hit";
-            if (Has(n, "attack", "slash", "swing", "combo", "stab", "thrust", "strike", "punch", "kick"))
-                return Has(n, "heavy", "power", "charge", "overhead", "downward", "jump attack", "spin") ? "heavy" : "light";
+            if (Has(n, "hit", "impact", "react")) return "impact";
+            // 짧고 빠른 베기 = 약공격, 큰 동작(attack, 내려찍기 등) = 강공격
+            if (Has(n, "slash", "swing", "stab", "thrust", "combo", "strike", "punch"))
+                return Has(n, "heavy", "power", "charge", "overhead", "downward") ? "heavy" : "light";
+            if (Has(n, "attack")) return "heavy";
             if (Has(n, "jump")) return "jump";
             if (Has(n, "sprint")) return "sprint";
-            if (Has(n, "run", "jog", "walk") && Has(n, "back")) return "runBackward";
-            if (Has(n, "strafe", "walk", "run", "jog") && Has(n, "left")) return "strafeLeft";
-            if (Has(n, "strafe", "walk", "run", "jog") && Has(n, "right")) return "strafeRight";
-            if (Has(n, "run", "jog")) return "run";
-            if (Has(n, "walk")) return "walk";
+            if (Has(n, "strafe", "walk", "run", "jog")) return "move";
             if (Has(n, "idle")) return "idle";
             return null;
         }
 
-        static bool IsLooping(string slot) =>
-            slot is "idle" or "walk" or "run" or "sprint" or "runBackward" or "strafeLeft" or "strafeRight" or "guard";
+        static bool IsLooping(string slot) => slot is "idle" or "move" or "sprint" or "guard";
 
         // ───────── ③ 컨트롤러 생성 + 적용 ─────────
 

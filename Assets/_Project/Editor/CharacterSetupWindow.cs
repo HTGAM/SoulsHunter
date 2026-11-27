@@ -251,6 +251,7 @@ namespace SoulsHunter.EditorTools
                     string pts = string.Join(", ", entry.hitPoints.Select(p => p.ToString("0.00")));
                     Log($"{entry.type,-6} {entry.hitPoints.Count}타 @ {pts,-22} 손 최고속도 {maxSpeed:0.0} m/s, 길이 {clip.length:0.00}초 [{method}]  ({ClipLabel(clip)})");
                 }
+                ArrangeAttacks(set);
                 EditorUtility.SetDirty(set);
                 AssetDatabase.SaveAssets();
                 Log("어색한 곳은 세트 에셋의 Hit Points 값을 직접 고치면 돼요 (0~1, 클립 길이 대비).");
@@ -260,6 +261,54 @@ namespace SoulsHunter.EditorTools
                 if (startedMode) AnimationMode.StopAnimationMode();
                 DestroyImmediate(go);
             }
+        }
+
+        const int MinLightCombo = 3;
+        const float MaxLightLength = 2f;
+
+        /// <summary>
+        /// 공격 클립을 콤보에 어울리게 정리한다.
+        /// - 약공격: 짧고(2초 이하) 한 번 휘두르는 베기 → 짧은 순서대로 (빠른 연타)
+        /// - 강공격: 나머지(긴 동작, 여러 번 휘두르는 동작, 큰 공격) → 짧은 순서대로
+        /// 콤보는 목록 순서대로 쓰이므로(1타 = 첫 번째) 순서가 곧 콤보 순서다.
+        /// </summary>
+        void ArrangeAttacks(CharacterAnimationSet set)
+        {
+            var generic = set.attacks.Where(a => a.clip && !a.weapon).ToList();
+            if (generic.Count == 0) return;
+
+            static bool LooksLight(CharacterAnimationSet.AttackClip a)
+            {
+                string n = ClipLabel(a.clip).ToLowerInvariant();
+                return Has(n, "slash", "swing", "stab", "thrust", "strike", "punch");
+            }
+            static int Hits(CharacterAnimationSet.AttackClip a) => a.hitPoints?.Count > 0 ? a.hitPoints.Count : 1;
+
+            var lights = generic.Where(a => LooksLight(a) && Hits(a) == 1 && a.clip.length <= MaxLightLength)
+                                .OrderBy(a => a.clip.length).ToList();
+            var heavies = generic.Except(lights).OrderBy(a => a.clip.length).ToList();
+
+            // 약공격이 모자라면 강공격 중 짧은 한 번 휘두르기를 데려온다
+            while (lights.Count < MinLightCombo)
+            {
+                var pick = heavies.FirstOrDefault(a => Hits(a) == 1) ?? heavies.FirstOrDefault();
+                if (pick == null) break;
+                heavies.Remove(pick);
+                lights.Add(pick);
+            }
+
+            foreach (var a in lights) { a.type = PlayerCombat.AttackType.Light; a.comboIndex = -1; }
+            foreach (var a in heavies) { a.type = PlayerCombat.AttackType.Heavy; a.comboIndex = -1; }
+
+            set.attacks.RemoveAll(a => generic.Contains(a));
+            set.attacks.InsertRange(0, lights.Concat(heavies));
+
+            Log("\n── 콤보 순서 (자동 정리) ──");
+            for (int i = 0; i < lights.Count; i++)
+                Log($"약공격 {i + 1}: {ClipLabel(lights[i].clip),-34} {lights[i].clip.length:0.00}초 {Hits(lights[i])}타");
+            for (int i = 0; i < heavies.Count; i++)
+                Log($"강공격 {i + 1}: {ClipLabel(heavies[i].clip),-34} {heavies[i].clip.length:0.00}초 {Hits(heavies[i])}타");
+            Log("※ 무기의 콤보가 N단계면 앞에서부터 N개를 쓰고, 그보다 많으면 처음부터 다시 돌아요.");
         }
 
         // 몸통 이동은 빼고 손이 몸 기준으로 어디 있는지
@@ -343,7 +392,7 @@ namespace SoulsHunter.EditorTools
                 maxSpeed = max;
                 if (max < 0.5f) return result; // 거의 안 움직이는 클립
                 float threshold = max * 0.55f;
-                float minGap = Mathf.Max(0.2f, clip.length * 0.12f); // 휘두르기 사이 최소 간격(초)
+                float minGap = Mathf.Max(0.3f, clip.length * 0.12f); // 휘두르기 사이 최소 간격(초). 더 가까우면 한 번 휘두른 것으로 본다
 
                 // 임계값을 넘는 구간마다 가장 빠른 지점 하나
                 int bestIndex = -1;

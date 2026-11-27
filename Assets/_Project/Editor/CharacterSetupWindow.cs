@@ -925,6 +925,8 @@ namespace SoulsHunter.EditorTools
                     closed = true;
                 }
             }
+            // 창이 쓰던 그래프 데이터도 지워야 Play 때 오류가 다시 안 난다
+            AnimatorWindowRepair.DestroyOrphanGraphs();
             return closed;
         }
 

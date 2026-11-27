@@ -26,6 +26,12 @@ namespace SoulsHunter.Animations
             [Range(0.05f, 0.95f)] public float impactPoint = 0.4f;
             [Tooltip("이 클립만 따로 빠르게/느리게 (1 = 세트 기본 속도)")]
             [Range(0.5f, 2f)] public float speed = 1f;
+            [Tooltip("타격 지점들 (0~1). 한 클립에 여러 번 휘두르면 여러 개 → 그만큼 따로 맞는다.\n" +
+                     "Character Setup의 '타격 지점 자동 찾기'가 손 움직임으로 채운다. 비어 있으면 Impact Point 하나만 사용")]
+            public List<float> hitPoints = new();
+
+            /// <summary>실제로 쓸 타격 지점 목록</summary>
+            public IReadOnlyList<float> HitPoints => hitPoints != null && hitPoints.Count > 0 ? hitPoints : new[] { impactPoint };
         }
 
         [Header("Attack Timing")]
@@ -33,6 +39,10 @@ namespace SoulsHunter.Animations
         public bool matchAttackDurationToClip = true;
         [Tooltip("공격 애니메이션 재생 속도. 1 = 원본 속도, 클수록 빠르고 공격 간격이 짧아짐")]
         [Range(0.5f, 2f)] public float attackPlaybackSpeed = 1.2f;
+        [Tooltip("타격 하나가 판정을 내는 길이 (클립 길이 대비 0~1)")]
+        [Range(0.03f, 0.3f)] public float hitWindow = 0.08f;
+        [Tooltip("여러 번 때리는 클립의 피해 합계 배율. 예: 1.3이고 3타면 한 대당 피해 x0.43")]
+        [Range(0.5f, 3f)] public float multiHitTotalDamage = 1.3f;
 
         [Header("Locomotion (반복 재생)")]
         public AnimationClip idle;

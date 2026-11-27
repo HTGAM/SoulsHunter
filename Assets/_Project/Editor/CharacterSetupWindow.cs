@@ -5,6 +5,7 @@ using UnityEditor;
 using UnityEditor.Animations;
 using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.Playables; // SetTime, SetSourcePlayable 확장 메서드
 using SoulsHunter.Animations;
 using SoulsHunter.Player;
 
@@ -58,6 +59,7 @@ namespace SoulsHunter.EditorTools
             using (new EditorGUI.DisabledScope(!model || !animationSet))
             {
                 if (GUILayout.Button("③ 애니메이터 만들고 씬의 Player에 적용", GUILayout.Height(28))) BuildAndApply();
+                if (GUILayout.Button("④ 공격 타격 지점 자동 찾기 (손 움직임 분석)", GUILayout.Height(28))) { log = ""; DetectHitPoints(animationSet); }
             }
 
             EditorGUILayout.Space();
@@ -196,9 +198,133 @@ namespace SoulsHunter.EditorTools
                 Log($"{f.Name,-12} {(c ? ClipLabel(c) : "(없음)")}");
             }
             Log($"약공격 {lights.Count}개, 강공격 {heavies.Count}개");
-            Log("세트 에셋에서 공격마다 타격 지점(Impact Point)을 조정할 수 있어요.");
+            if (model) DetectHitPoints(set);
             Selection.activeObject = set;
             return set;
+        }
+
+        // ───────── ④ 타격 지점 자동 찾기 ─────────
+
+        /// <summary>
+        /// 공격 클립을 모델에 재생해 보면서 오른손(무기)이 가장 빠르게 움직이는 순간들을 찾는다.
+        /// 그 순간이 휘두르기의 한가운데 = 타격 지점. 여러 번 휘두르는 클립은 여러 개가 나온다.
+        /// </summary>
+        void DetectHitPoints(CharacterAnimationSet set)
+        {
+            if (!model || !set) return;
+            var go = (GameObject)Instantiate(model);
+            go.hideFlags = HideFlags.HideAndDontSave;
+            go.transform.SetPositionAndRotation(Vector3.zero, Quaternion.identity);
+            try
+            {
+                var animator = go.GetComponent<Animator>();
+                if (!animator || !animator.isHuman)
+                {
+                    Log("타격 지점 찾기 실패: 모델이 Humanoid가 아니에요. ① 버튼을 먼저 눌러주세요.");
+                    return;
+                }
+                animator.applyRootMotion = false;
+                var hand = animator.GetBoneTransform(HumanBodyBones.RightHand);
+                var hips = animator.GetBoneTransform(HumanBodyBones.Hips);
+
+                Log("\n── 타격 지점 ──");
+                foreach (var entry in set.attacks)
+                {
+                    if (!entry.clip) continue;
+                    entry.hitPoints = FindSwingPeaks(animator, entry.clip, hand, hips);
+                    if (entry.hitPoints.Count > 0) entry.impactPoint = Mathf.Clamp(entry.hitPoints[0], 0.05f, 0.95f);
+                    string pts = string.Join(", ", entry.hitPoints.Select(p => p.ToString("0.00")));
+                    Log($"{entry.type,-6} {entry.clip.name,-30} {entry.hitPoints.Count}타 @ {pts}   ({ClipLabel(entry.clip)})");
+                }
+                EditorUtility.SetDirty(set);
+                AssetDatabase.SaveAssets();
+                Log("어색한 곳은 세트 에셋의 Hit Points 값을 직접 고치면 돼요 (0~1, 클립 길이 대비).");
+            }
+            finally
+            {
+                DestroyImmediate(go);
+            }
+        }
+
+        static List<float> FindSwingPeaks(Animator animator, AnimationClip clip, Transform hand, Transform hips)
+        {
+            var result = new List<float>();
+            if (!hand || clip.length <= 0f) return result;
+
+            var graph = UnityEngine.Playables.PlayableGraph.Create("HitPointScan");
+            try
+            {
+                graph.SetTimeUpdateMode(UnityEngine.Playables.DirectorUpdateMode.Manual);
+                var output = UnityEngine.Animations.AnimationPlayableOutput.Create(graph, "out", animator);
+                var playable = UnityEngine.Animations.AnimationClipPlayable.Create(graph, clip);
+                playable.SetApplyFootIK(false);
+                output.SetSourcePlayable(playable);
+
+                int samples = Mathf.Clamp(Mathf.RoundToInt(clip.length * 60f), 30, 600);
+                float dt = clip.length / samples;
+                var speed = new float[samples + 1];
+                Vector3 prev = Vector3.zero;
+                for (int i = 0; i <= samples; i++)
+                {
+                    playable.SetTime(i * dt);
+                    graph.Evaluate();
+                    // 몸통 이동은 빼고 손이 몸 기준으로 얼마나 빨리 움직이는지
+                    Vector3 p = hand.position - (hips ? new Vector3(hips.position.x, 0f, hips.position.z) : Vector3.zero);
+                    if (i > 0) speed[i] = (p - prev).magnitude / dt;
+                    prev = p;
+                }
+                speed[0] = speed.Length > 1 ? speed[1] : 0f;
+
+                // 살짝 부드럽게 (튀는 값 제거)
+                var smooth = new float[speed.Length];
+                for (int i = 0; i < speed.Length; i++)
+                {
+                    float sum = 0f; int n = 0;
+                    for (int k = -2; k <= 2; k++)
+                    {
+                        int j = i + k;
+                        if (j < 0 || j >= speed.Length) continue;
+                        sum += speed[j]; n++;
+                    }
+                    smooth[i] = sum / n;
+                }
+
+                float max = smooth.Max();
+                if (max < 0.5f) return result; // 거의 안 움직이는 클립
+                float threshold = max * 0.55f;
+                float minGap = Mathf.Max(0.2f, clip.length * 0.12f); // 휘두르기 사이 최소 간격(초)
+
+                // 임계값을 넘는 구간마다 가장 빠른 지점 하나
+                int bestIndex = -1;
+                for (int i = 0; i < smooth.Length; i++)
+                {
+                    if (smooth[i] >= threshold)
+                    {
+                        if (bestIndex < 0 || smooth[i] > smooth[bestIndex]) bestIndex = i;
+                    }
+                    else if (bestIndex >= 0)
+                    {
+                        AddPeak(result, bestIndex * dt / clip.length, minGap / clip.length);
+                        bestIndex = -1;
+                    }
+                }
+                if (bestIndex >= 0) AddPeak(result, bestIndex * dt / clip.length, minGap / clip.length);
+
+                // 너무 처음/끝에 있는 건 준비·마무리 동작이므로 제외, 최대 5타
+                result.RemoveAll(p => p < 0.08f || p > 0.92f);
+                if (result.Count > 5) result = result.Take(5).ToList();
+            }
+            finally
+            {
+                graph.Destroy();
+            }
+            return result;
+        }
+
+        static void AddPeak(List<float> peaks, float t, float minGap)
+        {
+            if (peaks.Count > 0 && t - peaks[^1] < minGap) return;
+            peaks.Add(t);
         }
 
         static bool TryAssign(CharacterAnimationSet set, string slot, AnimationClip clip)

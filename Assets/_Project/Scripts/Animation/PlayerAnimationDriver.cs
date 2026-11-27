@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using UnityEngine;
 using SoulsHunter.Combat;
 using SoulsHunter.Core;
@@ -37,6 +38,7 @@ namespace SoulsHunter.Animations
         AnimatorOverrideController overrides;
         CharacterAnimationSet.AttackClip currentAttack;
         bool useSlotB;
+        bool linearTimeline;
         Quaternion modelBaseRotation = Quaternion.identity;
 
         static readonly int AttackAHash = Animator.StringToHash("AttackA");
@@ -84,7 +86,22 @@ namespace SoulsHunter.Animations
                 float setSpeed = animationSet.attackPlaybackSpeed > 0f ? animationSet.attackPlaybackSpeed : 1f;
                 float clipDuration = entry.clip.length / (setSpeed * clipSpeed);
                 combat.AnimationTimeScale = Mathf.Clamp(step.Total / clipDuration, 0.2f, 3f);
+
+                // 클립의 타격 지점마다 판정 구간을 만든다 → 애니메이션에서 휘두르는 순간에 맞고, 여러 번 휘두르면 여러 번 맞는다
+                var hits = entry.HitPoints;
+                float total = step.Total;
+                float width = Mathf.Clamp(animationSet.hitWindow, 0.03f, 0.3f);
+                float scale = hits.Count > 1 ? Mathf.Max(0.1f, animationSet.multiHitTotalDamage) / hits.Count : 1f;
+                var windows = new List<(float, float, float)>();
+                foreach (float n in hits)
+                {
+                    float start = Mathf.Clamp01(n - width * 0.4f) * total; // 휘두르는 순간(손이 가장 빠를 때) 조금 앞부터
+                    windows.Add((start, start + width * total, scale));
+                }
+                combat.SetHitWindows(windows);
+                linearTimeline = true;
             }
+            else linearTimeline = false;
 
             // 지금 재생 중이 아닌 슬롯에 새 클립을 끼우고 그쪽으로 전환
             useSlotB = !useSlotB;
@@ -101,7 +118,15 @@ namespace SoulsHunter.Animations
             // 공격
             bool attacking = combat.IsAttacking && currentAttack != null;
             animator.TrySetBool(AttackingHash, attacking);
-            if (attacking) animator.TrySetFloat(AttackTimeHash, AttackNormalizedTime(combat.CurrentAttack, combat.AttackTimer, currentAttack.impactPoint));
+            if (attacking)
+            {
+                // 클립 기준 타이밍이면 그대로 비례, 아니면 타격 지점을 판정 시작에 맞춰 늘이고 줄인다
+                var step = combat.CurrentAttack;
+                float n = linearTimeline && step != null && step.Total > 0f
+                    ? Mathf.Clamp01(combat.AttackTimer / step.Total) * 0.999f
+                    : AttackNormalizedTime(step, combat.AttackTimer, currentAttack.impactPoint);
+                animator.TrySetFloat(AttackTimeHash, n);
+            }
             if (!combat.IsAttacking) currentAttack = null;
 
             // 회피

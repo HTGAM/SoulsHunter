@@ -135,7 +135,37 @@ namespace SoulsHunter.Player
 
         public bool IsAttacking => current != null;
         public AttackStep CurrentAttack => current;
-        public bool InActiveFrames => IsAttacking && timer >= current.windup && timer < current.windup + current.active;
+        public bool InActiveFrames => IsAttacking && CurrentWindow() >= 0;
+
+        // 타격 구간 (애니메이션이 정해줌). 비어 있으면 AttackStep의 windup/active 하나만 쓴다.
+        readonly List<(float start, float end, float damageScale)> hitWindows = new();
+        int activeWindow = -1;
+
+        /// <summary>
+        /// 이번 공격의 타격 구간들을 정한다 (공격 타이머 기준 초). 한 동작에 여러 번 휘두르면 구간마다 따로 맞는다.
+        /// PlayerAnimationDriver가 공격 시작 때 애니메이션의 타격 지점으로 채운다.
+        /// </summary>
+        public void SetHitWindows(IEnumerable<(float start, float end, float damageScale)> windows)
+        {
+            hitWindows.Clear();
+            hitWindows.AddRange(windows);
+            hitWindows.Sort((a, b) => a.start.CompareTo(b.start));
+            activeWindow = -1;
+        }
+
+        /// <summary>첫 타격이 시작되는 시간 (선딜 끝)</summary>
+        float Windup => hitWindows.Count > 0 ? hitWindows[0].start : current.windup;
+        /// <summary>마지막 타격이 끝나는 시간 (후딜 시작)</summary>
+        float ActiveEnd => hitWindows.Count > 0 ? hitWindows[^1].end : current.windup + current.active;
+
+        int CurrentWindow()
+        {
+            if (current == null) return -1;
+            if (hitWindows.Count == 0) return timer >= current.windup && timer < current.windup + current.active ? 0 : -1;
+            for (int i = 0; i < hitWindows.Count; i++)
+                if (timer >= hitWindows[i].start && timer < hitWindows[i].end) return i;
+            return -1;
+        }
         public bool IsCharging => charging;
         /// <summary>현재 공격 경과 시간(초). 모으기 중엔 멈춘다 (애니메이션 동기화용)</summary>
         public float AttackTimer => timer;
@@ -256,6 +286,8 @@ namespace SoulsHunter.Player
         void Begin(AttackStep step, AttackType type, int index)
         {
             current = step;
+            hitWindows.Clear(); // AttackStarted를 받은 애니메이션 쪽이 다시 채운다
+            activeWindow = -1;
             currentType = type;
             comboIndex = index;
             timer = 0f;
@@ -287,7 +319,7 @@ namespace SoulsHunter.Player
             var a = current;
 
             // 모으기: 예고 끝에서 버튼을 누르고 있으면 멈춰서 힘을 모은다
-            if (a.chargeLevels > 0 && !chargeDone && timer + dt >= a.windup)
+            if (a.chargeLevels > 0 && !chargeDone && timer + dt >= Windup)
             {
                 bool held = currentType == AttackType.Heavy ? input.HeavyAttackHeld : input.LightAttackHeld;
                 // 모으는 시간은 애니메이션 배율과 상관없이 실제 시간 기준
@@ -299,10 +331,10 @@ namespace SoulsHunter.Player
             timer += dt;
 
             // 선딜 중엔 대상 쪽으로 조금씩 돌 수 있다 (소울류 '트래킹')
-            if (timer < a.windup) locomotion.FaceTowards(locomotion.GetIntendedFacing(), a.trackingSpeed * dt);
+            if (timer < Windup) locomotion.FaceTowards(locomotion.GetIntendedFacing(), a.trackingSpeed * dt);
 
-            // 선딜~판정 동안 전진
-            float lungeTime = a.windup + a.active;
+            // 선딜~첫 타격 동안 전진
+            float lungeTime = hitWindows.Count > 0 ? hitWindows[0].end : a.windup + a.active;
             if (a.lunge > 0f && prev < lungeTime)
             {
                 float p = Mathf.Clamp01(timer / lungeTime);
@@ -311,11 +343,21 @@ namespace SoulsHunter.Player
                 lungeProgress = eased;
             }
 
-            if (InActiveFrames) DoHitDetection();
+            // 타격 구간마다 새로 맞힐 수 있다 (한 동작 여러 번 휘두르기)
+            int window = CurrentWindow();
+            if (window >= 0)
+            {
+                if (window != activeWindow)
+                {
+                    activeWindow = window;
+                    hitThisSwing.Clear();
+                }
+                DoHitDetection(hitWindows.Count > 0 ? hitWindows[window].damageScale : 1f);
+            }
 
             // 콤보 선입력은 후딜이 거의 끝날 때(comboChainPoint)까지 기다렸다가 이어진다.
             // 애니메이션이 중간에 끊기지 않고 마무리 동작까지 보이게 하기 위함.
-            float chainTime = a.windup + a.active + a.recovery * comboChainPoint;
+            float chainTime = ActiveEnd + Mathf.Max(0f, a.Total - ActiveEnd) * comboChainPoint;
             bool canChain = timer >= chainTime;
             if (canChain && bufferedAttack.HasValue && currentType != AttackType.Special)
             {
@@ -366,7 +408,7 @@ namespace SoulsHunter.Player
             }
         }
 
-        void DoHitDetection()
+        void DoHitDetection(float damageScale)
         {
             var a = current;
             Vector3 center = transform.TransformPoint(a.hitboxCenter);
@@ -388,7 +430,8 @@ namespace SoulsHunter.Player
 
             float chargeMult = 1f + chargeLevel * a.chargeDamagePerLevel;
             float poiseMult = 1f + chargeLevel * a.chargePoisePerLevel;
-            float damage = a.damage * (weapon ? weapon.DamageMultiplier : 1f) * ExternalDamageMultiplier * chargeMult;
+            float damage = a.damage * (weapon ? weapon.DamageMultiplier : 1f) * ExternalDamageMultiplier * chargeMult * damageScale;
+            poiseMult *= damageScale;
 
             bool anyHit = false;
             foreach (var kv in best)

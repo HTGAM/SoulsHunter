@@ -229,6 +229,10 @@ namespace SoulsHunter.EditorTools
                 var hand = animator.GetBoneTransform(HumanBodyBones.RightHand);
                 var hips = animator.GetBoneTransform(HumanBodyBones.Hips);
 
+                // 서 있을 때(바인드 포즈) 골반 높이 → 앉아서 하는 동작 판별 기준
+                float standingHips = hips ? hips.position.y - go.transform.position.y : 1f;
+                crouchClips.Clear();
+
                 Log("\n── 타격 지점 ──");
                 foreach (var entry in set.attacks)
                 {
@@ -238,18 +242,26 @@ namespace SoulsHunter.EditorTools
                     float dt = clip.length / samples;
 
                     // 1차: Animation 창과 같은 방식(AnimationMode). 안 움직이면 2차: Playable 그래프
-                    var positions = SampleWithAnimationMode(go, clip, hand, hips, samples, dt);
+                    var hipsY = new float[samples + 1];
+                    var positions = SampleWithAnimationMode(go, clip, hand, hips, samples, dt, hipsY);
                     string method = "AnimationMode";
                     if (TotalMovement(positions) < 0.01f)
                     {
-                        positions = SampleWithPlayables(animator, clip, hand, hips, samples, dt);
+                        positions = SampleWithPlayables(animator, clip, hand, hips, samples, dt, hipsY);
                         method = "Playables";
                     }
+
+                    // 동작 대부분을 골반이 낮게(서 있을 때의 80% 미만) 있으면 앉아서 하는 공격
+                    float baseY = go.transform.position.y;
+                    float medianHips = hipsY.Select(y => y - baseY).OrderBy(y => y).ElementAt(hipsY.Length / 2);
+                    bool crouching = standingHips > 0.1f && medianHips < standingHips * 0.8f;
+                    if (crouching) crouchClips.Add(clip);
 
                     entry.hitPoints = FindSwingPeaks(positions, dt, clip.length, out float maxSpeed);
                     if (entry.hitPoints.Count > 0) entry.impactPoint = Mathf.Clamp(entry.hitPoints[0], 0.05f, 0.95f);
                     string pts = string.Join(", ", entry.hitPoints.Select(p => p.ToString("0.00")));
-                    Log($"{entry.type,-6} {entry.hitPoints.Count}타 @ {pts,-22} 손 최고속도 {maxSpeed:0.0} m/s, 길이 {clip.length:0.00}초 [{method}]  ({ClipLabel(clip)})");
+                    Log($"{entry.type,-6} {entry.hitPoints.Count}타 @ {pts,-22} 손 최고속도 {maxSpeed:0.0} m/s, 길이 {clip.length:0.00}초" +
+                        $"{(crouching ? "  [앉은 자세]" : "")} [{method}]  ({ClipLabel(clip)})");
                 }
                 ArrangeAttacks(set);
                 EditorUtility.SetDirty(set);
@@ -265,6 +277,7 @@ namespace SoulsHunter.EditorTools
 
         const int MinLightCombo = 3;
         const float MaxLightLength = 2f;
+        readonly HashSet<AnimationClip> crouchClips = new();
 
         /// <summary>
         /// 공격 클립을 콤보에 어울리게 정리한다.
@@ -284,14 +297,17 @@ namespace SoulsHunter.EditorTools
             }
             static int Hits(CharacterAnimationSet.AttackClip a) => a.hitPoints?.Count > 0 ? a.hitPoints.Count : 1;
 
-            var lights = generic.Where(a => LooksLight(a) && Hits(a) == 1 && a.clip.length <= MaxLightLength)
+            // 앉아서 하는 공격은 콤보에 어울리지 않으므로 맨 뒤(쓰이지 않는 자리)로 보낸다
+            bool Crouch(CharacterAnimationSet.AttackClip a) => crouchClips.Contains(a.clip);
+
+            var lights = generic.Where(a => !Crouch(a) && LooksLight(a) && Hits(a) == 1 && a.clip.length <= MaxLightLength)
                                 .OrderBy(a => a.clip.length).ToList();
-            var heavies = generic.Except(lights).OrderBy(a => a.clip.length).ToList();
+            var heavies = generic.Except(lights).OrderBy(a => Crouch(a)).ThenBy(a => a.clip.length).ToList();
 
             // 약공격이 모자라면 강공격 중 짧은 한 번 휘두르기를 데려온다
             while (lights.Count < MinLightCombo)
             {
-                var pick = heavies.FirstOrDefault(a => Hits(a) == 1) ?? heavies.FirstOrDefault();
+                var pick = heavies.FirstOrDefault(a => !Crouch(a) && Hits(a) == 1) ?? heavies.FirstOrDefault(a => !Crouch(a));
                 if (pick == null) break;
                 heavies.Remove(pick);
                 lights.Add(pick);
@@ -315,7 +331,7 @@ namespace SoulsHunter.EditorTools
         static Vector3 HandPoint(Transform hand, Transform hips) =>
             hand.position - (hips ? new Vector3(hips.position.x, 0f, hips.position.z) : Vector3.zero);
 
-        static Vector3[] SampleWithAnimationMode(GameObject go, AnimationClip clip, Transform hand, Transform hips, int samples, float dt)
+        static Vector3[] SampleWithAnimationMode(GameObject go, AnimationClip clip, Transform hand, Transform hips, int samples, float dt, float[] hipsY)
         {
             var pos = new Vector3[samples + 1];
             for (int i = 0; i <= samples; i++)
@@ -324,11 +340,12 @@ namespace SoulsHunter.EditorTools
                 AnimationMode.SampleAnimationClip(go, clip, i * dt);
                 AnimationMode.EndSampling();
                 pos[i] = HandPoint(hand, hips);
+                hipsY[i] = hips ? hips.position.y : 0f;
             }
             return pos;
         }
 
-        static Vector3[] SampleWithPlayables(Animator animator, AnimationClip clip, Transform hand, Transform hips, int samples, float dt)
+        static Vector3[] SampleWithPlayables(Animator animator, AnimationClip clip, Transform hand, Transform hips, int samples, float dt, float[] hipsY)
         {
             var pos = new Vector3[samples + 1];
             animator.Rebind();
@@ -346,6 +363,7 @@ namespace SoulsHunter.EditorTools
                     playable.SetTime(i * dt);
                     graph.Evaluate();
                     pos[i] = HandPoint(hand, hips);
+                    hipsY[i] = hips ? hips.position.y : 0f;
                 }
             }
             finally

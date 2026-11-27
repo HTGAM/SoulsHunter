@@ -2,6 +2,8 @@ using System.Collections.Generic;
 using System.Text;
 using UnityEngine;
 using UnityEngine.UI;
+using SoulsHunter.Combat;
+using SoulsHunter.Core;
 using SoulsHunter.Items;
 using SoulsHunter.Player;
 using SoulsHunter.World;
@@ -18,15 +20,19 @@ namespace SoulsHunter.UI
         [SerializeField] PlayerInteractor interactor;
         [SerializeField] PlayerInventory inventory;
         [SerializeField] PlayerInputHandler input;
+        [SerializeField] PlayerWeapon weapon;
 
         const float ToastDuration = 3.5f;
         const int MaxToasts = 5;
+        static readonly Color BonfireBannerColor = new(1f, 0.82f, 0.45f);
+        static readonly Color HuntBannerColor = new(0.95f, 0.85f, 0.55f);
 
         Text flaskText, promptText, bannerText, inventoryText;
         GameObject promptRoot, inventoryRoot;
         RectTransform toastRoot;
         Font font;
         float bannerTime = -10f;
+        Color bannerColor = BonfireBannerColor;
 
         readonly List<(Text text, float time)> toasts = new();
 
@@ -39,6 +45,7 @@ namespace SoulsHunter.UI
                 if (!interactor) interactor = player.GetComponent<PlayerInteractor>();
                 if (!inventory) inventory = player.GetComponent<PlayerInventory>();
                 if (!input) input = player.GetComponent<PlayerInputHandler>();
+                if (!weapon) weapon = player.GetComponent<PlayerWeapon>();
             }
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUI();
@@ -49,24 +56,40 @@ namespace SoulsHunter.UI
                 inventory.Changed += RefreshInventory;
             }
             Bonfire.Rested += OnRested;
+            GameEvents.Notified += AddToast;
+            MonsterRewards.Slain += OnMonsterSlain;
         }
 
-        void OnDestroy() => Bonfire.Rested -= OnRested;
+        void OnDestroy()
+        {
+            Bonfire.Rested -= OnRested;
+            GameEvents.Notified -= AddToast;
+            MonsterRewards.Slain -= OnMonsterSlain;
+        }
 
         void Update()
         {
             float now = Time.unscaledTime;
 
-            if (flask) flaskText.text = $"회복약  {flask.Charges} / {flask.MaxCharges}";
+            string status = flask ? $"회복약  {flask.Charges} / {flask.MaxCharges}" : "";
+            if (weapon) status = $"<size=20><color=#CCCCCC>{weapon.DisplayName}</color></size>\n{status}";
+            flaskText.text = status;
 
             var target = interactor ? interactor.Current : null;
             promptRoot.SetActive(target);
-            if (target) promptText.text = $"<b>[E]</b>  {target.Prompt}";
+            if (target)
+            {
+                promptText.text = $"<b>[E]</b>  {target.Prompt}";
+                // 문구 길이에 맞춰 상자 크기 조절
+                var pr = (RectTransform)promptRoot.transform;
+                pr.sizeDelta = new Vector2(Mathf.Max(420f, promptText.preferredWidth + 60f),
+                                           Mathf.Max(54f, promptText.preferredHeight + 20f));
+            }
 
-            // 화톳불 배너: 1초 동안 나타났다가 서서히 사라짐
+            // 배너: 잠깐 나타났다가 서서히 사라짐
             float b = now - bannerTime;
             float alpha = b < 0.4f ? b / 0.4f : Mathf.Clamp01(1f - (b - 1.8f) / 0.8f);
-            bannerText.color = new Color(1f, 0.82f, 0.45f, alpha);
+            bannerText.color = new Color(bannerColor.r, bannerColor.g, bannerColor.b, alpha);
 
             // 획득 알림
             for (int i = toasts.Count - 1; i >= 0; i--)
@@ -91,7 +114,10 @@ namespace SoulsHunter.UI
             }
         }
 
-        void OnItemAdded(ItemData item, int amount)
+        void OnItemAdded(ItemData item, int amount) =>
+            AddToast($"<color=#{ColorUtility.ToHtmlStringRGB(item.RarityColor)}>{item.DisplayName}</color>  x{amount}  획득");
+
+        void AddToast(string message)
         {
             if (toasts.Count >= MaxToasts)
             {
@@ -99,14 +125,21 @@ namespace SoulsHunter.UI
                 toasts.RemoveAt(0);
             }
             var t = MakeText(toastRoot, "Toast", 24, TextAnchor.MiddleRight);
-            t.text = $"<color=#{ColorUtility.ToHtmlStringRGB(item.RarityColor)}>{item.DisplayName}</color>  x{amount}  획득";
-            ((RectTransform)t.transform).sizeDelta = new Vector2(520f, 34f);
+            t.text = message;
+            ((RectTransform)t.transform).sizeDelta = new Vector2(720f, 34f);
             toasts.Add((t, Time.unscaledTime));
         }
 
-        void OnRested(Bonfire bonfire, bool firstTime)
+        void OnRested(Bonfire bonfire, bool firstTime) =>
+            ShowBanner(firstTime ? "BONFIRE LIT" : bonfire.BonfireName, BonfireBannerColor);
+
+        void OnMonsterSlain(Health monster) =>
+            ShowBanner($"HUNT COMPLETE\n<size=36>{monster.DisplayName}</size>", HuntBannerColor);
+
+        void ShowBanner(string text, Color color)
         {
-            bannerText.text = firstTime ? "BONFIRE LIT" : bonfire.BonfireName;
+            bannerText.text = text;
+            bannerColor = color;
             bannerTime = Time.unscaledTime;
         }
 

@@ -37,10 +37,17 @@ namespace SoulsHunter.Items
         Health health;
         PlayerInventory inventory;
 
+        /// <summary>보상이 있는 몬스터를 쓰러뜨렸을 때 (토벌 완료 배너 등)</summary>
+        public static event Action<Health> Slain;
+
         void Awake()
         {
             health = GetComponent<Health>();
-            health.Died += () => Give(killRewards);
+            health.Died += () =>
+            {
+                Give(killRewards);
+                Slain?.Invoke(health);
+            };
             foreach (var hb in GetComponentsInChildren<Hurtbox>())
                 hb.Broken += OnPartBroken;
         }

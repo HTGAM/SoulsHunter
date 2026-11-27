@@ -89,6 +89,7 @@ namespace SoulsHunter.Player
         PlayerStamina stamina;
         Health ownHealth;
         PlayerFlask flask;
+        PlayerWeapon weapon;
 
         AttackStep current;
         AttackType currentType;
@@ -124,6 +125,7 @@ namespace SoulsHunter.Player
             stamina = GetComponent<PlayerStamina>();
             ownHealth = GetComponent<Health>();
             flask = GetComponent<PlayerFlask>();
+            weapon = GetComponent<PlayerWeapon>();
             if (ownHealth) ownHealth.InvulnerabilityCheck = () => locomotion.IsInvulnerable;
 
             locomotion.Dodged += _ => EndAttack(); // 구르기는 공격을 캔슬한다
@@ -262,7 +264,7 @@ namespace SoulsHunter.Player
                 hitThisSwing.Add(kv.Key);
                 var info = new DamageInfo
                 {
-                    Amount = a.damage,
+                    Amount = a.damage * (weapon ? weapon.DamageMultiplier : 1f),
                     PoiseDamage = a.poiseDamage,
                     Point = kv.Value.point,
                     Direction = transform.forward,

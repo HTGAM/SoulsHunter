@@ -49,13 +49,23 @@ namespace SoulsHunter.World
             if (player.TryGetComponent(out PlayerLocomotion locomotion)) locomotion.Stun(restDuration);
             if (player.TryGetComponent(out PlayerDamageHandler damage))
             {
-                Vector3 spawn = transform.position + transform.forward * 1.5f;
-                damage.SetRespawnPoint(spawn, Quaternion.LookRotation(-transform.forward));
+                GetRespawnPose(out var spawn, out var rot);
+                damage.SetRespawnPoint(spawn, rot);
             }
 
             GameEvents.RaiseWorldReset();
             Rested?.Invoke(this, firstTime);
         }
+
+        /// <summary>이 화톳불에서 부활할 위치와 방향 (화톳불 앞, 화톳불을 바라봄)</summary>
+        public void GetRespawnPose(out Vector3 position, out Quaternion rotation)
+        {
+            position = transform.position + transform.forward * 1.5f;
+            rotation = Quaternion.LookRotation(-transform.forward);
+        }
+
+        /// <summary>저장 데이터를 불러올 때 이벤트 없이 불만 붙인다.</summary>
+        public void RestoreLit() => SetLit(true);
 
         void SetLit(bool lit)
         {

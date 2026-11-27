@@ -47,5 +47,19 @@ namespace SoulsHunter.Items
             Changed?.Invoke();
             return true;
         }
+
+        /// <summary>저장 데이터로 가방 내용을 통째로 바꾼다. 획득 알림은 띄우지 않는다.</summary>
+        public void LoadContents(IEnumerable<(ItemData item, int count)> contents)
+        {
+            items.Clear();
+            order.Clear();
+            foreach (var (item, count) in contents)
+            {
+                if (!item || count <= 0 || items.ContainsKey(item)) continue;
+                items[item] = Mathf.Min(count, item.MaxStack);
+                order.Add(item);
+            }
+            Changed?.Invoke();
+        }
     }
 }

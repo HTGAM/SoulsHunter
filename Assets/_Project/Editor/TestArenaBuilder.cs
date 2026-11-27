@@ -10,6 +10,7 @@ using SoulsHunter.Items;
 using SoulsHunter.World;
 using System.Collections.Generic;
 using SoulsHunter.Player;
+using SoulsHunter.Save;
 using SoulsHunter.UI;
 
 namespace SoulsHunter.EditorTools
@@ -21,7 +22,18 @@ namespace SoulsHunter.EditorTools
     /// </summary>
     public static class TestArenaBuilder
     {
-        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD", "Bonfire" };
+        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD", "Bonfire", "Forge" };
+
+        [MenuItem("SoulsHunter/Delete Save Data")]
+        static void DeleteSaveData()
+        {
+            if (!EditorUtility.DisplayDialog("SoulsHunter", $"저장 파일을 지울까요?\n{SaveSystem.SavePath}", "지우기", "취소")) return;
+            SaveSystem.DeleteSave();
+            Debug.Log("[SoulsHunter] 저장 파일을 지웠어요.");
+        }
+
+        [MenuItem("SoulsHunter/Open Save Folder")]
+        static void OpenSaveFolder() => EditorUtility.RevealInFinder(SaveSystem.SavePath);
 
         [MenuItem("SoulsHunter/Build Test Arena")]
         static void Build()
@@ -110,6 +122,10 @@ namespace SoulsHunter.EditorTools
             Dummy(dummies.transform, "Dummy A", new Vector3(-3f, 0f, 7f), 1f, 150f, enemyMat);
             Dummy(dummies.transform, "Dummy B", new Vector3(3f, 0f, 9f), 1f, 150f, enemyMat);
             BuildBoss(dummies.transform, new Vector3(0f, 0f, 20f), enemyMat, weakMat);
+
+            // 대장간 + 무기 강화 + 저장
+            BuildForge(new Vector3(3f, 0f, -4f));
+            SetupProgression(player);
 
             Selection.activeGameObject = player;
             Undo.CollapseUndoOperations(group);
@@ -218,6 +234,68 @@ namespace SoulsHunter.EditorTools
             SetString(bonfire, "bonfireName", "아레나 입구");
             SetRef(bonfire, "fireLight", light);
             SetRef(bonfire, "flame", flame);
+        }
+
+        static void BuildForge(Vector3 pos)
+        {
+            var root = Create("Forge");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.Euler(0f, -30f, 0f);
+
+            var ironMat = MakeMaterial(new Color(0.22f, 0.22f, 0.25f));
+            Primitive(PrimitiveType.Cube, "Anvil Base", root.transform, new Vector3(0f, 0.3f, 0f), new Vector3(0.5f, 0.6f, 0.4f), ironMat);
+            Primitive(PrimitiveType.Cube, "Anvil Top", root.transform, new Vector3(0f, 0.7f, 0f), new Vector3(1.1f, 0.2f, 0.45f), ironMat);
+            var horn = Visual(PrimitiveType.Cylinder, "Anvil Horn", root.transform, new Vector3(0.65f, 0.7f, 0f), new Vector3(0.18f, 0.2f, 0.18f), ironMat);
+            horn.transform.localRotation = Quaternion.Euler(0f, 0f, 90f);
+
+            var coalMat = MakeMaterial(new Color(1f, 0.3f, 0.05f));
+            coalMat.EnableKeyword("_EMISSION");
+            coalMat.SetColor("_EmissionColor", new Color(1f, 0.3f, 0.05f) * 2f);
+            Primitive(PrimitiveType.Cube, "Furnace", root.transform, new Vector3(-1.3f, 0.6f, 0.3f), new Vector3(0.9f, 1.2f, 0.9f), MakeMaterial(new Color(0.35f, 0.3f, 0.28f)));
+            Visual(PrimitiveType.Cube, "Coals", root.transform, new Vector3(-1.3f, 0.6f, -0.16f), new Vector3(0.6f, 0.35f, 0.05f), coalMat);
+
+            var lightGo = new GameObject("Forge Light");
+            lightGo.transform.SetParent(root.transform, false);
+            lightGo.transform.localPosition = new Vector3(-1.1f, 1f, -0.6f);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.45f, 0.15f);
+            light.range = 6f;
+            light.intensity = 2f;
+
+            var forge = root.AddComponent<Forge>();
+            SetRef(forge, "forgeLight", light);
+        }
+
+        /// <summary>무기 강화 단계(재료)와 저장 시스템을 플레이어에 붙인다.</summary>
+        static void SetupProgression(GameObject player)
+        {
+            var scale = GetOrCreateItem("RavagerScale", "철갑 비늘", "Ravager의 단단한 비늘. 방어구 소재.", 2);
+            var hide = GetOrCreateItem("RavagerHide", "철갑 가죽", "질기고 무거운 가죽.", 2);
+            var gem = GetOrCreateItem("RavagerGem", "철갑의 보옥", "몸속에서 드물게 자라는 보석. 아주 귀하다.", 6);
+            var fang = GetOrCreateItem("RavagerFang", "강철 엄니", "머리를 파괴해야 얻을 수 있는 엄니.", 3);
+            var spike = GetOrCreateItem("RavagerTailSpike", "꼬리 가시", "꼬리를 파괴해야 얻을 수 있는 가시.", 3);
+
+            static PlayerWeapon.UpgradeStep Step(float bonus, params (ItemData item, int amount)[] costs)
+            {
+                var step = new PlayerWeapon.UpgradeStep { damageBonus = bonus };
+                foreach (var (item, amount) in costs) step.costs.Add(new PlayerWeapon.Cost { item = item, amount = amount });
+                return step;
+            }
+
+            var weapon = player.AddComponent<PlayerWeapon>();
+            weapon.EditorSetup("헌터의 대검", new List<PlayerWeapon.UpgradeStep>
+            {
+                Step(0.15f, (scale, 2), (hide, 1)),
+                Step(0.15f, (scale, 3), (hide, 2), (fang, 1)),
+                Step(0.20f, (scale, 4), (spike, 1), (fang, 2)),
+                Step(0.25f, (hide, 4), (spike, 2), (gem, 1)),
+            });
+            EditorUtility.SetDirty(weapon);
+
+            var save = player.AddComponent<SaveSystem>();
+            save.EditorSetup(new List<ItemData> { scale, hide, gem, fang, spike });
+            EditorUtility.SetDirty(save);
         }
 
         const string ItemFolder = "Assets/_Project/Data/Items";

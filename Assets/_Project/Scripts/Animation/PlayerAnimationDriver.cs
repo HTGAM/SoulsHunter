@@ -27,6 +27,9 @@ namespace SoulsHunter.Animations
         [Header("Controller Slots (Character Setup이 채움)")]
         [SerializeField] AnimationClip attackSlotA;
         [SerializeField] AnimationClip attackSlotB;
+        [Tooltip("이동 클립이 실제로 움직이는 속도(m/s): 앞, 뒤, 왼쪽, 오른쪽. 이보다 빨리 움직이면 애니메이션을 빨리 재생")]
+        [SerializeField] Vector4 locomotionClipSpeeds = new(4.5f, 4.5f, 4.5f, 4.5f);
+        [SerializeField] float maxLocomotionPlaybackSpeed = 2.2f;
 
         PlayerLocomotion locomotion;
         PlayerCombat combat;
@@ -43,6 +46,7 @@ namespace SoulsHunter.Animations
         static readonly int DodgingHash = Animator.StringToHash("Dodging");
         static readonly int DodgeTimeHash = Animator.StringToHash("DodgeTime");
         static readonly int GroundedHash = Animator.StringToHash("Grounded");
+        static readonly int LocoSpeedHash = Animator.StringToHash("LocoSpeed");
 
         void Awake()
         {
@@ -92,8 +96,26 @@ namespace SoulsHunter.Animations
             animator.TrySetBool(DodgingHash, locomotion.IsDodging);
             animator.TrySetFloat(DodgeTimeHash, locomotion.DodgeProgress);
             animator.TrySetBool(GroundedHash, locomotion.IsGrounded);
+            animator.TrySetFloat(LocoSpeedHash, LocomotionPlaybackSpeed(), 0.1f);
 
             UpdateModelRotation();
+        }
+
+        /// <summary>
+        /// 블렌드 트리의 가장 바깥 클립보다 빨리 움직이면 그만큼 빨리 재생해서 발이 미끄러지지 않게 한다.
+        /// 방향별 클립 속도로 타원을 만들어 지금 방향의 '클립 최고 속도'를 구한다.
+        /// </summary>
+        float LocomotionPlaybackSpeed()
+        {
+            Vector3 v = transform.InverseTransformDirection(locomotion.HorizontalVelocity);
+            float speed = new Vector2(v.x, v.z).magnitude;
+            if (speed < 0.1f) return 1f;
+
+            float dz = v.z / speed, dx = v.x / speed;
+            float f = Mathf.Max(0.1f, dz >= 0f ? locomotionClipSpeeds.x : locomotionClipSpeeds.y);
+            float s = Mathf.Max(0.1f, dx >= 0f ? locomotionClipSpeeds.w : locomotionClipSpeeds.z);
+            float edge = 1f / Mathf.Sqrt(dz * dz / (f * f) + dx * dx / (s * s));
+            return Mathf.Clamp(speed / edge, 1f, maxLocomotionPlaybackSpeed);
         }
 
         /// <summary>

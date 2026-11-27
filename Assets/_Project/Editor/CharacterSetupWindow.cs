@@ -317,12 +317,27 @@ namespace SoulsHunter.EditorTools
                 return;
             }
             EnsureFolder();
-            var controller = BuildController(animationSet, out var slotA, out var slotB);
-            ApplyToPlayer(player, controller, slotA, slotB);
+            var controller = BuildController(animationSet, player, out var slotA, out var slotB, out var clipSpeeds);
+            ApplyToPlayer(player, controller, slotA, slotB, clipSpeeds);
         }
 
-        AnimatorController BuildController(CharacterAnimationSet set, out AnimationClip slotA, out AnimationClip slotB)
+        /// <summary>컴포넌트의 숫자 필드 값을 읽는다 (없으면 기본값)</summary>
+        static float ReadFloat<T>(GameObject go, string field, float fallback) where T : Component
         {
+            var c = go.GetComponent<T>();
+            var p = c ? new SerializedObject(c).FindProperty(field) : null;
+            return p != null ? p.floatValue : fallback;
+        }
+
+        /// <summary>클립이 실제로 움직이는 속도(m/s, 수평). 루트 모션이 없으면 0</summary>
+        static Vector2 ClipVelocity(AnimationClip c) => c ? new Vector2(c.averageSpeed.x, c.averageSpeed.z) : Vector2.zero;
+
+        AnimatorController BuildController(CharacterAnimationSet set, GameObject player,
+                                           out AnimationClip slotA, out AnimationClip slotB, out Vector4 clipSpeeds)
+        {
+            float runSpeed = ReadFloat<PlayerLocomotion>(player, "runSpeed", 4.5f);
+            float drinkDuration = ReadFloat<PlayerFlask>(player, "drinkDuration", 1.1f);
+            float staggerDuration = ReadFloat<PlayerDamageHandler>(player, "staggerDuration", 0.6f);
             if (AssetDatabase.LoadAssetAtPath<Object>(ControllerPath)) AssetDatabase.DeleteAsset(ControllerPath);
             var ctrl = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
 
@@ -333,6 +348,7 @@ namespace SoulsHunter.EditorTools
             foreach (var t in new[] { "AttackA", "AttackB", "Roll", "Backstep", "Hit", "Stagger", "Drink", "Parry", "GuardBreak", "Vault", "Counter" })
                 ctrl.AddParameter(t, AnimatorControllerParameterType.Trigger);
             ctrl.AddParameter("ComboIndex", AnimatorControllerParameterType.Int);
+            ctrl.AddParameter(new AnimatorControllerParameter { name = "LocoSpeed", type = AnimatorControllerParameterType.Float, defaultFloat = 1f });
 
             // 공격 슬롯용 빈 클립 (실행 중 실제 공격 클립으로 갈아 끼움)
             slotA = new AnimationClip { name = "__AttackSlotA" };
@@ -342,20 +358,42 @@ namespace SoulsHunter.EditorTools
 
             var sm = ctrl.layers[0].stateMachine;
 
-            // 이동: 2D 블렌드 트리 (MoveX = 옆, MoveY = 앞뒤, 달리기 속도 = 1)
+            // 이동: 2D 블렌드 트리 (MoveX = 옆, MoveY = 앞뒤, 단위 = 코드의 달리기 속도)
+            // 각 클립을 '실제로 움직이는 속도' 위치에 둬서 걸음과 이동 속도가 맞게 한다.
             var loco = ctrl.CreateBlendTreeInController("Locomotion", out var tree, 0);
             tree.blendType = BlendTreeType.FreeformDirectional2D;
             tree.blendParameter = "MoveX";
             tree.blendParameterY = "MoveY";
-            void Add(AnimationClip c, float x, float y) { if (c) tree.AddChild(c, new Vector2(x, y)); }
-            Add(set.idle, 0f, 0f);
-            Add(set.walk, 0f, 0.45f);
-            Add(set.run, 0f, 1f);
-            Add(set.sprint, 0f, 1.6f);
-            Add(set.runBackward, 0f, -1f);
-            Add(set.strafeLeft, -1f, 0f);
-            Add(set.strafeRight, 1f, 0f);
+            void Add(AnimationClip c, Vector2 fallback)
+            {
+                if (!c) return;
+                Vector2 v = ClipVelocity(c);
+                Vector2 pos = v.sqrMagnitude > 0.01f ? v / runSpeed : fallback;
+                tree.AddChild(c, pos);
+                if (c != set.idle) Log($"블렌드 위치 {c.name,-28} ({pos.x:0.00}, {pos.y:0.00})  ← {v.magnitude:0.00} m/s");
+            }
+            Add(set.idle, Vector2.zero);
+            Add(set.walk, new Vector2(0f, 0.45f));
+            Add(set.run, new Vector2(0f, 1f));
+            Add(set.sprint, new Vector2(0f, 1.6f));
+            Add(set.runBackward, new Vector2(0f, -1f));
+            Add(set.strafeLeft, new Vector2(-1f, 0f));
+            Add(set.strafeRight, new Vector2(1f, 0f));
             sm.defaultState = loco;
+
+            // 가장 바깥 클립보다 빨리 움직이면(전력 질주 등) 애니메이션을 빨리 재생한다 → PlayerAnimationDriver가 LocoSpeed 계산
+            loco.speedParameterActive = true;
+            loco.speedParameter = "LocoSpeed";
+            float Speed(params AnimationClip[] clips)
+            {
+                foreach (var c in clips) { float s = ClipVelocity(c).magnitude; if (s > 0.1f) return s; }
+                return runSpeed;
+            }
+            clipSpeeds = new Vector4(
+                Speed(set.sprint, set.run, set.walk),
+                Speed(set.runBackward),
+                Speed(set.strafeLeft),
+                Speed(set.strafeRight));
 
             AnimatorState State(string name, Motion m, int row, int col)
             {
@@ -416,20 +454,37 @@ namespace SoulsHunter.EditorTools
                 BackByCondition(s, "Dodging", AnimatorConditionMode.IfNot);
             }
 
-            // 한 번 재생하고 돌아오는 동작들
+            // 한 번 재생하고 돌아오는 동작들. targetDuration > 0이면 코드의 동작 시간에 맞춰 재생 속도를 바꾼다.
             int row = 1;
-            foreach (var (name, clip, trigger) in new[]
+            foreach (var (name, clip, trigger, targetDuration, cancelByMoving) in new[]
                      {
-                         ("Hit", set.hit, "Hit"), ("Stagger", set.stagger ? set.stagger : set.hit, "Stagger"),
-                         ("Drink", set.drink, "Drink"), ("Parry", set.parry, "Parry"),
-                         ("GuardBreak", set.guardBreak ? set.guardBreak : set.hit, "GuardBreak"),
-                         ("Counter", set.counter ? set.counter : set.parry, "Counter"), ("Jump", set.jump, "Vault"),
+                         ("Hit", set.hit, "Hit", 0.5f, true),
+                         ("Stagger", set.stagger ? set.stagger : set.hit, "Stagger", staggerDuration, false),
+                         ("Drink", set.drink, "Drink", drinkDuration, false),
+                         ("Parry", set.parry, "Parry", 0f, true),
+                         ("GuardBreak", set.guardBreak ? set.guardBreak : set.hit, "GuardBreak", 0f, true),
+                         ("Counter", set.counter ? set.counter : set.parry, "Counter", 0f, true),
+                         ("Jump", set.jump, "Vault", 0f, false),
                      })
             {
                 if (!clip) continue;
                 var s = State(name, clip, row++, 2);
+                if (targetDuration > 0f && clip.length > 0f)
+                {
+                    // 클립의 85% 지점에서 돌아가므로 그 시점이 targetDuration이 되도록
+                    s.speed = Mathf.Clamp(clip.length * 0.85f / targetDuration, 0.5f, 6f);
+                    Log($"{name} 재생 속도 x{s.speed:0.00} (클립 {clip.length:0.00}초 → 약 {targetDuration:0.00}초)");
+                }
                 AnyTo(s, 0.1f, trigger);
                 BackByExitTime(s);
+                if (cancelByMoving)
+                {
+                    // 경직이 없는 가벼운 반응은 움직이기 시작하면 바로 끊는다 (미끄러지는 것처럼 보이지 않게)
+                    var t = s.AddTransition(loco);
+                    t.hasExitTime = false;
+                    t.duration = 0.15f;
+                    t.AddCondition(AnimatorConditionMode.Greater, 1f, "Speed");
+                }
             }
 
             // 가드: 상체만 덮는 레이어
@@ -468,7 +523,7 @@ namespace SoulsHunter.EditorTools
             return ctrl;
         }
 
-        void ApplyToPlayer(GameObject player, AnimatorController controller, AnimationClip slotA, AnimationClip slotB)
+        void ApplyToPlayer(GameObject player, AnimatorController controller, AnimationClip slotA, AnimationClip slotB, Vector4 clipSpeeds)
         {
             Undo.SetCurrentGroupName("Apply Character");
             int group = Undo.GetCurrentGroup();
@@ -510,6 +565,9 @@ namespace SoulsHunter.EditorTools
             SetRef(driver, "model", inst.transform);
             SetRef(driver, "attackSlotA", slotA);
             SetRef(driver, "attackSlotB", slotB);
+            var dso = new SerializedObject(driver);
+            dso.FindProperty("locomotionClipSpeeds").vector4Value = clipSpeeds;
+            dso.ApplyModifiedProperties();
 
             // 무기를 손에 붙인다. 소켓 방향은 바인드 포즈 기준 캐릭터 정면 → 어색하면 소켓을 돌려서 맞추면 됨
             var loadout = player.GetComponent<PlayerWeaponLoadout>();

@@ -441,10 +441,12 @@ namespace SoulsHunter.EditorTools
             var b = LocalBounds(root, model);
             float current = Mathf.Max(b.size.y, b.size.z);
             if (current > 0.001f) model.transform.localScale = Vector3.one * (p.size / current);
-            // 발 높이: 대기 동작을 실제로 입혀서 가장 낮은 정점을 바닥에 맞춘다
+            // 발 높이: 대기 동작을 실제로 입혀서 가장 낮은 뼈(발끝)를 바닥에 맞춘다
             // (기본 자세와 대기 자세의 다리 높이가 달라 떠 보이는 것 방지)
             float lowest = LowestPointInPose(root, model, set.idle ? set.idle : set.walk);
-            if (float.IsInfinity(lowest)) lowest = LocalBounds(root, model).min.y;
+            var bodyBounds = LocalBounds(root, model);
+            if (float.IsInfinity(lowest) || lowest < bodyBounds.min.y - bodyBounds.size.y || lowest > bodyBounds.max.y)
+                lowest = bodyBounds.min.y; // 값이 말이 안 되면 예전 방식
             model.transform.localPosition += new Vector3(0f, -lowest, 0f);
             b = LocalBounds(root, model);
 
@@ -602,17 +604,20 @@ namespace SoulsHunter.EditorTools
         }
 
         /// <summary>
-        /// 클립의 첫 프레임 자세에서 메시의 가장 낮은 높이 (루트 기준).
-        /// 메시를 그 자세로 구워서 정점을 직접 본다. 실패하면 +무한대.
+        /// 클립의 첫 프레임 자세에서 가장 낮은 뼈의 높이 (루트 기준).
+        /// 발끝 뼈가 바닥에 닿게 하려고 쓴다. 실패하면 +무한대.
+        /// (메시 범위는 실제보다 넓게 잡혀 있는 경우가 많아서 뼈로 본다)
         /// </summary>
         static float LowestPointInPose(Transform root, GameObject model, AnimationClip clip)
         {
-            var skins = model.GetComponentsInChildren<SkinnedMeshRenderer>();
-            if (skins.Length == 0) return float.PositiveInfinity;
+            var bones = new HashSet<Transform>();
+            foreach (var skin in model.GetComponentsInChildren<SkinnedMeshRenderer>())
+                foreach (var bone in skin.bones)
+                    if (bone) bones.Add(bone);
+            if (bones.Count == 0) return float.PositiveInfinity;
 
             bool started = !AnimationMode.InAnimationMode();
             if (started) AnimationMode.StartAnimationMode();
-            var baked = new Mesh();
             float lowest = float.PositiveInfinity;
             try
             {
@@ -622,22 +627,12 @@ namespace SoulsHunter.EditorTools
                     AnimationMode.SampleAnimationClip(model, clip, 0f);
                     AnimationMode.EndSampling();
                 }
-                var vertices = new List<Vector3>();
-                foreach (var skin in skins)
-                {
-                    if (!skin.sharedMesh) continue;
-                    skin.BakeMesh(baked, true);
-                    baked.GetVertices(vertices);
-                    var t = skin.transform;
-                    var toWorld = Matrix4x4.TRS(t.position, t.rotation, Vector3.one);
-                    foreach (var v in vertices)
-                        lowest = Mathf.Min(lowest, root.InverseTransformPoint(toWorld.MultiplyPoint3x4(v)).y);
-                }
+                foreach (var bone in bones)
+                    lowest = Mathf.Min(lowest, root.InverseTransformPoint(bone.position).y);
             }
             finally
             {
                 if (started) AnimationMode.StopAnimationMode(); // 자세를 원래대로
-                Object.DestroyImmediate(baked);
             }
             return lowest;
         }

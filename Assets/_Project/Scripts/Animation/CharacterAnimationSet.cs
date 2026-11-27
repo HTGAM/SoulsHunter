@@ -39,6 +39,13 @@ namespace SoulsHunter.Animations
         public bool matchAttackDurationToClip = true;
         [Tooltip("공격 애니메이션 재생 속도. 1 = 원본 속도, 클수록 빠르고 공격 간격이 짧아짐")]
         [Range(0.5f, 2f)] public float attackPlaybackSpeed = 1.2f;
+        [Tooltip("약공격만 추가로 빠르게 (기본 속도에 곱함)")]
+        [Range(0.5f, 2.5f)] public float lightAttackSpeed = 1.45f;
+        [Tooltip("공격 클립 앞부분의 '가만히 서 있다가 준비하는' 구간을 잘라낸다")]
+        public bool trimAttackLeadIn = true;
+        [Tooltip("첫 휘두르기 전에 남겨둘 준비 동작 길이(초, 클립 기준). 짧을수록 즉발")]
+        [Range(0.1f, 1f)] public float lightLeadIn = 0.28f;
+        [Range(0.1f, 1.5f)] public float heavyLeadIn = 0.55f;
         [Tooltip("타격 하나가 판정을 내는 길이 (클립 길이 대비 0~1)")]
         [Range(0.03f, 0.3f)] public float hitWindow = 0.08f;
         [Tooltip("여러 번 때리는 클립의 피해 합계 배율. 예: 1.3이고 3타면 한 대당 피해 x0.43")]

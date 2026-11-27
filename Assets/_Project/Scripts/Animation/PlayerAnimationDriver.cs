@@ -43,6 +43,7 @@ namespace SoulsHunter.Animations
         CharacterAnimationSet.AttackClip currentAttack;
         bool useSlotB;
         bool linearTimeline;
+        float clipStart; // 공격 클립을 어디서부터 재생하는지 (0~1, 준비 동작 잘라내기)
         Quaternion modelBaseRotation = Quaternion.identity;
 
         static readonly int AttackAHash = Animator.StringToHash("AttackA");
@@ -85,33 +86,45 @@ namespace SoulsHunter.Animations
             var step = combat.CurrentAttack;
             if (animationSet.matchAttackDurationToClip && step != null && step.Total > 0f)
             {
+                bool light = type == PlayerCombat.AttackType.Light;
+                var hits = entry.HitPoints;
+                float length = entry.clip.length;
+
+                // 앞부분 준비 동작 잘라내기: 첫 휘두르기 전 leadIn초만 남기고 그 앞은 건너뛴다 → 버튼 누르면 바로 휘두름
+                float leadIn = light ? animationSet.lightLeadIn : animationSet.heavyLeadIn;
+                clipStart = 0f;
+                if (animationSet.trimAttackLeadIn && leadIn > 0f && hits.Count > 0 && length > 0f)
+                    clipStart = Mathf.Clamp(hits[0] - leadIn / length, 0f, hits[0]);
+                float used = 1f - clipStart; // 실제로 재생하는 비율
+
                 // 예전에 만든 세트 에셋은 새 필드가 0일 수 있으므로 0이면 1로 취급
                 float clipSpeed = entry.speed > 0f ? entry.speed : 1f;
                 float setSpeed = animationSet.attackPlaybackSpeed > 0f ? animationSet.attackPlaybackSpeed : 1f;
-                float clipDuration = entry.clip.length / (setSpeed * clipSpeed);
-                combat.AnimationTimeScale = Mathf.Clamp(step.Total / clipDuration, 0.2f, 3f);
+                float typeSpeed = light && animationSet.lightAttackSpeed > 0f ? animationSet.lightAttackSpeed : 1f;
+                float clipDuration = length * used / (setSpeed * clipSpeed * typeSpeed);
+                combat.AnimationTimeScale = Mathf.Clamp(step.Total / clipDuration, 0.2f, 4f);
 
                 // 클립의 타격 지점마다 판정 구간을 만든다 → 애니메이션에서 휘두르는 순간에 맞고, 여러 번 휘두르면 여러 번 맞는다
-                var hits = entry.HitPoints;
                 float total = step.Total;
-                float width = Mathf.Clamp(animationSet.hitWindow, 0.03f, 0.3f);
+                float width = Mathf.Clamp(animationSet.hitWindow, 0.03f, 0.3f) / used;
                 float scale = hits.Count > 1 ? Mathf.Max(0.1f, animationSet.multiHitTotalDamage) / hits.Count : 1f;
                 var windows = new List<(float, float, float)>();
-                foreach (float n in hits)
+                foreach (float hit in hits)
                 {
+                    float n = (hit - clipStart) / used; // 잘라낸 구간 기준 위치
                     float start = Mathf.Clamp01(n - width * 0.4f) * total; // 휘두르는 순간(손이 가장 빠를 때) 조금 앞부터
                     windows.Add((start, start + width * total, scale));
                 }
                 combat.SetHitWindows(windows);
                 linearTimeline = true;
             }
-            else linearTimeline = false;
+            else { linearTimeline = false; clipStart = 0f; }
 
             // 지금 재생 중이 아닌 슬롯에 새 클립을 끼우고 그쪽으로 전환
             useSlotB = !useSlotB;
             overrides[useSlotB ? attackSlotB : attackSlotA] = entry.clip;
             currentAttack = entry;
-            animator.SetFloat(AttackTimeHash, 0f);
+            animator.SetFloat(AttackTimeHash, clipStart);
             animator.SetTrigger(useSlotB ? AttackBHash : AttackAHash);
         }
 
@@ -127,7 +140,7 @@ namespace SoulsHunter.Animations
                 // 클립 기준 타이밍이면 그대로 비례, 아니면 타격 지점을 판정 시작에 맞춰 늘이고 줄인다
                 var step = combat.CurrentAttack;
                 float n = linearTimeline && step != null && step.Total > 0f
-                    ? Mathf.Clamp01(combat.AttackTimer / step.Total) * 0.999f
+                    ? (clipStart + Mathf.Clamp01(combat.AttackTimer / step.Total) * (1f - clipStart)) * 0.999f
                     : AttackNormalizedTime(step, combat.AttackTimer, currentAttack.impactPoint);
                 animator.TrySetFloat(AttackTimeHash, n);
             }

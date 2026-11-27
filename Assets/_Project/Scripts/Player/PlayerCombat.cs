@@ -101,6 +101,8 @@ namespace SoulsHunter.Player
         [SerializeField] float inputBuffer = 0.3f;
         [Tooltip("후딜이 이만큼(0~1) 진행된 뒤에야 다음 콤보·이동으로 넘어간다. 1이면 동작이 완전히 끝나야 함 (구르기는 예외)")]
         [SerializeField, Range(0f, 1f)] float comboChainPoint = 0.85f;
+        [Tooltip("약공격끼리 이어질 때는 이 지점부터 (작을수록 빠릿빠릿한 연타)")]
+        [SerializeField, Range(0f, 1f)] float lightComboChainPoint = 0.45f;
         [Tooltip("켜면 공격마다 AttackStep의 스태미나를 쓴다 (소울류). 끄면 몬헌식: 공격은 스태미나를 쓰지 않는다")]
         [SerializeField] bool attacksUseStamina = false;
         [Tooltip("모으기 최대 단계에서 이 시간이 지나면 저절로 내려친다")]
@@ -357,7 +359,9 @@ namespace SoulsHunter.Player
 
             // 콤보 선입력은 후딜이 거의 끝날 때(comboChainPoint)까지 기다렸다가 이어진다.
             // 애니메이션이 중간에 끊기지 않고 마무리 동작까지 보이게 하기 위함.
-            float chainTime = ActiveEnd + Mathf.Max(0f, a.Total - ActiveEnd) * comboChainPoint;
+            // 약공격 → 약공격 연타는 더 일찍 이어진다
+            float chainPoint = currentType == AttackType.Light && bufferedAttack == AttackType.Light ? lightComboChainPoint : comboChainPoint;
+            float chainTime = ActiveEnd + Mathf.Max(0f, a.Total - ActiveEnd) * chainPoint;
             bool canChain = timer >= chainTime;
             if (canChain && bufferedAttack.HasValue && currentType != AttackType.Special)
             {

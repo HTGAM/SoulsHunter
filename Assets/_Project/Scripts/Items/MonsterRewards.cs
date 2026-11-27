@@ -33,11 +33,13 @@ namespace SoulsHunter.Items
 
         [SerializeField] List<Reward> killRewards = new();
         [SerializeField] List<PartReward> partRewards = new();
+        [Tooltip("쓰러뜨리면 'HUNT COMPLETE' 배너를 띄운다 (대형 몬스터용)")]
+        [SerializeField] bool announceHunt = true;
 
         Health health;
         PlayerInventory inventory;
 
-        /// <summary>보상이 있는 몬스터를 쓰러뜨렸을 때 (토벌 완료 배너 등)</summary>
+        /// <summary>대형 몬스터(announceHunt)를 쓰러뜨렸을 때 (토벌 완료 배너 등)</summary>
         public static event Action<Health> Slain;
 
         void Awake()
@@ -46,7 +48,7 @@ namespace SoulsHunter.Items
             health.Died += () =>
             {
                 Give(killRewards);
-                Slain?.Invoke(health);
+                if (announceHunt) Slain?.Invoke(health);
             };
             foreach (var hb in GetComponentsInChildren<Hurtbox>())
                 hb.Broken += OnPartBroken;
@@ -75,10 +77,11 @@ namespace SoulsHunter.Items
         }
 
 #if UNITY_EDITOR
-        public void EditorSetup(List<Reward> kill, List<PartReward> parts)
+        public void EditorSetup(List<Reward> kill, List<PartReward> parts, bool announce = true)
         {
             killRewards = kill;
             partRewards = parts;
+            announceHunt = announce;
         }
 #endif
     }

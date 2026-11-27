@@ -11,7 +11,7 @@ namespace SoulsHunter.Save
 {
     /// <summary>
     /// 진행 상황 저장/불러오기 (JSON, Application.persistentDataPath/save.json).
-    /// 저장하는 것: 가방, 무기 강화 단계, 불 붙인 화톳불, 마지막으로 쉰 화톳불.
+    /// 저장하는 것: 가방, 무기·방어구 강화 단계, 불 붙인 화톳불, 마지막으로 쉰 화톳불.
     /// - 시작할 때 불러오고, 마지막 화톳불 앞에서 시작한다.
     /// - 화톳불 휴식, 무기 강화 때 바로 저장. 아이템을 얻으면 잠시 뒤 자동 저장. 게임을 끌 때도 저장.
     /// 플레이어 오브젝트에 붙인다.
@@ -34,6 +34,7 @@ namespace SoulsHunter.Save
             public int version = 1;
             public List<ItemEntry> items = new();
             public int weaponLevel;
+            public int armorLevel;
             public List<string> litBonfires = new();
             public string lastBonfire = "";
         }
@@ -47,6 +48,7 @@ namespace SoulsHunter.Save
 
         PlayerInventory inventory;
         PlayerWeapon weapon;
+        PlayerArmor armor;
         PlayerDamageHandler damageHandler;
         PlayerLocomotion locomotion;
 
@@ -58,6 +60,7 @@ namespace SoulsHunter.Save
         {
             inventory = GetComponent<PlayerInventory>();
             weapon = GetComponent<PlayerWeapon>();
+            armor = GetComponent<PlayerArmor>();
             damageHandler = GetComponent<PlayerDamageHandler>();
             locomotion = GetComponent<PlayerLocomotion>();
         }
@@ -113,6 +116,7 @@ namespace SoulsHunter.Save
                 foreach (var item in inventory.Items)
                     data.items.Add(new ItemEntry { id = item.name, count = inventory.Count(item) });
             if (weapon) data.weaponLevel = weapon.Level;
+            if (armor) data.armorLevel = armor.Level;
             foreach (var b in FindObjectsByType<Bonfire>(FindObjectsSortMode.None))
                 if (b.IsLit) data.litBonfires.Add(b.BonfireName);
 
@@ -161,6 +165,7 @@ namespace SoulsHunter.Save
                 }
 
                 if (weapon) weapon.SetLevel(data.weaponLevel);
+                if (armor) armor.SetLevel(data.armorLevel);
 
                 lastBonfire = data.lastBonfire ?? "";
                 foreach (var b in FindObjectsByType<Bonfire>(FindObjectsSortMode.None))

@@ -6,17 +6,22 @@ using SoulsHunter.Player;
 namespace SoulsHunter.World
 {
     /// <summary>
-    /// 대장간 모루. 상호작용하면 몬스터 소재를 써서 무기를 한 단계 강화한다.
+    /// 대장간 (모루 / 방어구 작업대). 상호작용하면 몬스터 소재를 써서 장비를 한 단계 강화한다.
+    /// Slot으로 무기를 다룰지 방어구를 다룰지 정한다.
     /// 안내 문구에 다음 강화 재료와 보유 개수가 표시된다.
     /// </summary>
     public class Forge : Interactable
     {
+        public enum Slot { Weapon, Armor }
+
         [SerializeField] string forgeName = "대장간";
+        [SerializeField] Slot slot = Slot.Weapon;
         [Tooltip("강화 성공 시 잠깐 밝아지는 불빛 (선택)")]
         [SerializeField] Light forgeLight;
         [SerializeField] float flashIntensity = 6f;
 
-        PlayerWeapon weapon;
+        GameObject cachedPlayer;
+        UpgradableEquipment equipment;
         PlayerInventory inventory;
         float baseIntensity;
         float flashTime = -10f;
@@ -27,9 +32,10 @@ namespace SoulsHunter.World
         {
             get
             {
-                if (!weapon) return forgeName;
-                if (weapon.IsMaxed) return $"{weapon.DisplayName}  <color=#AAAAAA>(최대 강화)</color>";
-                return $"무기 강화  +{weapon.Level} → +{weapon.Level + 1}\n<size=20>{weapon.DescribeNextCost(inventory)}</size>";
+                if (!equipment) return forgeName;
+                if (equipment.IsMaxed) return $"{equipment.DisplayName}  <color=#AAAAAA>(최대 강화)</color>";
+                return $"{equipment.SlotName} 강화  +{equipment.Level} → +{equipment.Level + 1}\n" +
+                       $"<size=20>{equipment.DescribeNextCost(inventory)}</size>";
             }
         }
 
@@ -49,32 +55,44 @@ namespace SoulsHunter.World
         {
             if (!base.CanInteract(player)) return false;
             // 안내 문구를 만들 때 쓰도록 플레이어 컴포넌트를 기억해 둔다
-            if (!weapon || weapon.gameObject != player)
+            if (cachedPlayer != player)
             {
-                weapon = player.GetComponent<PlayerWeapon>();
+                cachedPlayer = player;
+                equipment = slot == Slot.Weapon
+                    ? player.GetComponent<PlayerWeapon>()
+                    : player.GetComponent<PlayerArmor>();
                 inventory = player.GetComponent<PlayerInventory>();
             }
-            return weapon;
+            return equipment;
         }
 
         public override void Interact(GameObject player)
         {
             if (!CanInteract(player)) return;
 
-            if (weapon.IsMaxed)
+            if (equipment.IsMaxed)
             {
-                GameEvents.Notify("이미 최대로 강화한 무기예요.");
+                GameEvents.Notify($"이미 최대로 강화한 {equipment.SlotName}예요.");
                 return;
             }
-            if (!weapon.TryUpgrade(inventory))
+            if (!equipment.TryUpgrade(inventory))
             {
                 GameEvents.Notify("<color=#FF6A5A>강화 재료가 부족해요.</color>");
                 return;
             }
 
             flashTime = Time.time;
-            GameEvents.Notify($"<color=#FFD27A>{weapon.DisplayName}</color> 강화 완료  (공격력 x{weapon.DamageMultiplier:0.00})");
+            GameEvents.Notify($"<color=#FFD27A>{equipment.DisplayName}</color> 강화 완료  ({equipment.StatSummary})");
             GameEvents.RaiseProgressChanged();
         }
+
+#if UNITY_EDITOR
+        public void EditorSetup(string name, Slot equipmentSlot, Light light)
+        {
+            forgeName = name;
+            slot = equipmentSlot;
+            forgeLight = light;
+        }
+#endif
     }
 }

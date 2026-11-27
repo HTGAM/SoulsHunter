@@ -49,6 +49,18 @@ namespace SoulsHunter.Enemy
             new("Tail Spin", 0f, 4.5f, 360f, 1.5f, 5f, 30f, 30f, 0.60f, 0.30f, 1.0f,   0f,  0f, Vector2.zero,    new(0f, 1f, 0f),   new(8f, 2f, 8f)),
         };
 
+        [Header("Enrage (분노 페이즈)")]
+        [Tooltip("체력 비율이 이 값 이하가 되면 분노한다. 0이면 사용 안 함")]
+        [SerializeField, Range(0f, 1f)] float enrageThreshold = 0f;
+        [Tooltip("분노 중 공격 동작 속도 배율 (예고·판정·빈틈이 모두 짧아진다)")]
+        [SerializeField] float enrageAttackSpeed = 1.3f;
+        [SerializeField] float enrageMoveSpeed = 1.3f;
+        [Tooltip("분노 중 공격 사이 쉬는 시간 배율")]
+        [SerializeField] float enrageDecisionScale = 0.5f;
+        [Tooltip("분노하는 순간 잠깐 멈춰서 포효하는 시간(초)")]
+        [SerializeField] float enrageRoarDuration = 1.2f;
+        [SerializeField] Color enragedIdleColor = new(0.7f, 0.05f, 0.02f);
+
         [Header("Telegraph (예고 표시)")]
         [SerializeField] Renderer[] telegraphRenderers;
         [SerializeField] Color idleColor = new(0.15f, 0.15f, 0.15f);
@@ -75,6 +87,7 @@ namespace SoulsHunter.Enemy
         EnemyAttack current;
         float timer, lungePrev, nextDecisionTime, staggerEnd;
         bool hitLanded;
+        bool enraged;
         Vector3 spawnPosition;
         Quaternion spawnRotation;
 
@@ -85,6 +98,10 @@ namespace SoulsHunter.Enemy
 
         public State CurrentState => state;
         public EnemyAttack CurrentAttack => current;
+        public bool IsEnraged => enraged;
+
+        /// <summary>분노 페이즈에 들어갈 때</summary>
+        public event System.Action Enraged;
 
         void Awake()
         {
@@ -99,6 +116,7 @@ namespace SoulsHunter.Enemy
 
             health.Staggered += _ => OnStaggered();
             health.Died += OnDied;
+            health.Damaged += _ => CheckEnrage();
         }
 
         void Start()
@@ -243,7 +261,7 @@ namespace SoulsHunter.Enemy
         void TickAttack(Vector3 toTarget, float dt)
         {
             var a = current;
-            timer += dt;
+            timer += dt * (enraged ? enrageAttackSpeed : 1f);
 
             if (!lockFacingDuringAttack && timer < a.windup && a.trackingSpeed > 0f) Turn(toTarget, a.trackingSpeed * dt);
 
@@ -261,7 +279,8 @@ namespace SoulsHunter.Enemy
 
             if (!hitLanded && timer >= a.windup && timer < a.windup + a.active) CheckHit(a);
 
-            if (timer >= a.Total) EnterChase(Random.Range(decisionDelay.x, decisionDelay.y));
+            if (timer >= a.Total)
+                EnterChase(Random.Range(decisionDelay.x, decisionDelay.y) * (enraged ? enrageDecisionScale : 1f));
         }
 
         void CheckHit(EnemyAttack a)
@@ -300,6 +319,31 @@ namespace SoulsHunter.Enemy
             if (agent.isOnNavMesh) { agent.isStopped = true; agent.ResetPath(); }
         }
 
+        void CheckEnrage()
+        {
+            if (enraged || enrageThreshold <= 0f || health.IsDead || state == State.Dead) return;
+            if (health.Normalized > enrageThreshold) return;
+
+            enraged = true;
+            agent.speed = moveSpeed * enrageMoveSpeed;
+            // 포효: 하던 공격을 끊고 잠깐 멈춘다 (플레이어가 숨 돌릴 틈)
+            if (enrageRoarDuration > 0f)
+            {
+                state = State.Staggered;
+                current = null;
+                staggerEnd = Time.time + enrageRoarDuration;
+                if (agent.isOnNavMesh) { agent.isStopped = true; agent.ResetPath(); }
+            }
+            GameEvents.Notify($"<color=#FF5544>{health.DisplayName}이(가) 분노했다!</color>");
+            Enraged?.Invoke();
+        }
+
+        void ClearEnrage()
+        {
+            enraged = false;
+            agent.speed = moveSpeed;
+        }
+
         void OnDied()
         {
             state = State.Dead;
@@ -312,10 +356,12 @@ namespace SoulsHunter.Enemy
             if (agent.isOnNavMesh) agent.Warp(spawnPosition);
             transform.rotation = spawnRotation;
             state = State.Idle;
+            ClearEnrage();
         }
 
         void ResetToSpawn()
         {
+            ClearEnrage();
             if (dummy) dummy.ResetAll();
             else
             {
@@ -377,7 +423,8 @@ namespace SoulsHunter.Enemy
             UpdateGroundTelegraph();
             if (telegraphRenderers == null || telegraphRenderers.Length == 0) return;
 
-            Color c = idleColor;
+            Color baseColor = enraged ? enragedIdleColor : idleColor;
+            Color c = baseColor;
             if (state == State.Attack && current != null)
             {
                 if (timer < current.windup)
@@ -385,7 +432,7 @@ namespace SoulsHunter.Enemy
                     // 판정 직전으로 갈수록 빠르게 깜빡인다
                     float t = timer / current.windup;
                     float pulse = 0.5f + 0.5f * Mathf.Sin(timer * Mathf.Lerp(8f, 30f, t));
-                    c = Color.Lerp(idleColor, windupColor, Mathf.Lerp(0.4f, 1f, pulse));
+                    c = Color.Lerp(baseColor, windupColor, Mathf.Lerp(0.4f, 1f, pulse));
                 }
                 else if (timer < current.windup + current.active) c = activeColor;
             }
@@ -399,6 +446,20 @@ namespace SoulsHunter.Enemy
                 r.SetPropertyBlock(block);
             }
         }
+
+#if UNITY_EDITOR
+        /// <summary>에디터 코드(테스트 아레나)에서 몬스터 종류별로 설정할 때 사용</summary>
+        public void EditorSetup(List<EnemyAttack> attackList, float speed, float engage, float aggro,
+                                float staggerTime, float enrageAt)
+        {
+            attacks = attackList;
+            moveSpeed = speed;
+            engageDistance = engage;
+            aggroRange = aggro;
+            staggerDuration = staggerTime;
+            enrageThreshold = enrageAt;
+        }
+#endif
 
         void OnDrawGizmosSelected()
         {

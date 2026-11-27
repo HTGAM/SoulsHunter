@@ -21,6 +21,7 @@ namespace SoulsHunter.UI
         [SerializeField] PlayerInventory inventory;
         [SerializeField] PlayerInputHandler input;
         [SerializeField] PlayerWeapon weapon;
+        [SerializeField] PlayerArmor armor;
 
         const float ToastDuration = 3.5f;
         const int MaxToasts = 5;
@@ -46,6 +47,7 @@ namespace SoulsHunter.UI
                 if (!inventory) inventory = player.GetComponent<PlayerInventory>();
                 if (!input) input = player.GetComponent<PlayerInputHandler>();
                 if (!weapon) weapon = player.GetComponent<PlayerWeapon>();
+                if (!armor) armor = player.GetComponent<PlayerArmor>();
             }
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUI();
@@ -72,6 +74,7 @@ namespace SoulsHunter.UI
             float now = Time.unscaledTime;
 
             string status = flask ? $"회복약  {flask.Charges} / {flask.MaxCharges}" : "";
+            if (armor) status = $"<size=20><color=#CCCCCC>{armor.DisplayName}</color></size>\n{status}";
             if (weapon) status = $"<size=20><color=#CCCCCC>{weapon.DisplayName}</color></size>\n{status}";
             flaskText.text = status;
 

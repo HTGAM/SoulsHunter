@@ -41,6 +41,15 @@ namespace SoulsHunter.Combat
         /// <summary>true를 반환하면 피해를 무시한다 (구르기 무적 등).</summary>
         public Func<bool> InvulnerabilityCheck;
 
+        readonly System.Collections.Generic.List<Func<float, float>> damageModifiers = new();
+
+        /// <summary>받는 피해량을 바꾸는 함수 (방어구 등). 등록된 순서대로 모두 적용된다.</summary>
+        public event Func<float, float> IncomingDamageModifiers
+        {
+            add => damageModifiers.Add(value);
+            remove => damageModifiers.Remove(value);
+        }
+
         public event Action<DamageInfo> Damaged;
         public event Action<DamageInfo> Staggered;
         public event Action Died;
@@ -59,6 +68,8 @@ namespace SoulsHunter.Combat
         {
             if (IsDead) return false;
             if (InvulnerabilityCheck != null && InvulnerabilityCheck()) return false;
+
+            foreach (var modify in damageModifiers) info.Amount = Mathf.Max(0f, modify(info.Amount));
 
             lastHitTime = Time.time;
             Current = Mathf.Max(0f, Current - info.Amount);

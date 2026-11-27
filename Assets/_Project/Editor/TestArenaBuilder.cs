@@ -22,7 +22,7 @@ namespace SoulsHunter.EditorTools
     /// </summary>
     public static class TestArenaBuilder
     {
-        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD", "Bonfire", "Forge" };
+        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD", "Bonfire", "Forge", "Armor Bench" };
 
         [MenuItem("SoulsHunter/Delete Save Data")]
         static void DeleteSaveData()
@@ -123,8 +123,14 @@ namespace SoulsHunter.EditorTools
             Dummy(dummies.transform, "Dummy B", new Vector3(3f, 0f, 9f), 1f, 150f, enemyMat);
             BuildBoss(dummies.transform, new Vector3(0f, 0f, 20f), enemyMat, weakMat);
 
-            // 대장간 + 무기 강화 + 저장
+            // 잡몹: 잿빛 들개 (초반 강화 소재)
+            var houndMat = MakeMaterial(new Color(0.45f, 0.42f, 0.4f));
+            BuildHound(dummies.transform, "Ashen Hound A", new Vector3(-9f, 0f, 11f), houndMat, weakMat);
+            BuildHound(dummies.transform, "Ashen Hound B", new Vector3(9f, 0f, 12f), houndMat, weakMat);
+
+            // 대장간(무기) + 방어구 작업대 + 장비 강화 + 저장
             BuildForge(new Vector3(3f, 0f, -4f));
+            BuildArmorBench(new Vector3(6f, 0f, -6.5f));
             SetupProgression(player);
 
             Selection.activeGameObject = player;
@@ -197,6 +203,7 @@ namespace SoulsHunter.EditorTools
             EditorUtility.SetDirty(rewards);
 
             var ai = boss.AddComponent<EnemyAI>();
+            SetFloat(ai, "enrageThreshold", 0.5f); // 체력 50% 이하에서 분노
             SetRef(ai, "telegraphMaterial", GetOrCreateTelegraphMaterial());
             var so = new SerializedObject(ai);
             var arr = so.FindProperty("telegraphRenderers");
@@ -264,7 +271,109 @@ namespace SoulsHunter.EditorTools
             light.intensity = 2f;
 
             var forge = root.AddComponent<Forge>();
-            SetRef(forge, "forgeLight", light);
+            forge.EditorSetup("대장간", Forge.Slot.Weapon, light);
+            EditorUtility.SetDirty(forge);
+        }
+
+        /// <summary>방어구 작업대: 탁자 + 갑옷 걸이. 방어구를 강화한다.</summary>
+        static void BuildArmorBench(Vector3 pos)
+        {
+            var root = Create("Armor Bench");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.Euler(0f, -60f, 0f);
+
+            var woodMat = MakeMaterial(new Color(0.42f, 0.3f, 0.2f));
+            var steelMat = MakeMaterial(new Color(0.6f, 0.6f, 0.65f));
+            Primitive(PrimitiveType.Cube, "Table", root.transform, new Vector3(0f, 0.45f, 0f), new Vector3(1.6f, 0.9f, 0.7f), woodMat);
+            Visual(PrimitiveType.Cube, "Plate", root.transform, new Vector3(-0.3f, 0.93f, 0f), new Vector3(0.5f, 0.06f, 0.4f), steelMat);
+            Visual(PrimitiveType.Cube, "Hammer", root.transform, new Vector3(0.4f, 0.93f, 0.1f), new Vector3(0.12f, 0.08f, 0.45f), steelMat);
+
+            // 갑옷 걸이 (탁자 옆)
+            Primitive(PrimitiveType.Cylinder, "Stand Pole", root.transform, new Vector3(1.4f, 0.8f, 0f), new Vector3(0.08f, 0.8f, 0.08f), woodMat);
+            Visual(PrimitiveType.Capsule, "Cuirass", root.transform, new Vector3(1.4f, 1.3f, 0f), new Vector3(0.55f, 0.4f, 0.35f), steelMat);
+            Visual(PrimitiveType.Sphere, "Helm", root.transform, new Vector3(1.4f, 1.85f, 0f), Vector3.one * 0.3f, steelMat);
+
+            var lightGo = new GameObject("Bench Light");
+            lightGo.transform.SetParent(root.transform, false);
+            lightGo.transform.localPosition = new Vector3(0f, 1.8f, -0.5f);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.85f, 0.6f);
+            light.range = 5f;
+            light.intensity = 1.2f;
+
+            var bench = root.AddComponent<Forge>();
+            bench.EditorSetup("방어구 작업대", Forge.Slot.Armor, light);
+            EditorUtility.SetDirty(bench);
+        }
+
+        /// <summary>
+        /// 잡몹 '잿빛 들개'. 빠르고 약하다. 물기(근거리)와 덮치기(돌진).
+        /// 초반 강화 소재(털, 이빨)를 준다. 토벌 배너는 띄우지 않는다.
+        /// </summary>
+        static void BuildHound(Transform parent, string name, Vector3 pos, Material bodyMat, Material weakMat)
+        {
+            var hound = Create(name);
+            hound.transform.SetParent(parent, false);
+            hound.transform.localPosition = pos;
+            hound.transform.rotation = Quaternion.Euler(0f, 180f, 0f);
+
+            var health = hound.AddComponent<Health>();
+            SetString(health, "displayName", "잿빛 들개");
+            SetFloat(health, "maxHealth", 120f);
+            SetFloat(health, "maxPoise", 25f);
+
+            Part(hound.transform, PrimitiveType.Capsule, "Body", new Vector3(0f, 0.7f, 0f), new Vector3(90f, 0f, 0f), new Vector3(0.7f, 0.7f, 0.7f), bodyMat, "Body", 1f, 0f);
+            Part(hound.transform, PrimitiveType.Sphere, "Head", new Vector3(0f, 0.85f, 0.75f), Vector3.zero, Vector3.one * 0.5f, weakMat, "Head", 1.4f, 0f);
+            foreach (var (x, z) in new[] { (-0.2f, 0.35f), (0.2f, 0.35f), (-0.2f, -0.35f), (0.2f, -0.35f) })
+                Visual(PrimitiveType.Cube, "Leg", hound.transform, new Vector3(x, 0.2f, z), new Vector3(0.12f, 0.4f, 0.12f), bodyMat);
+
+            var eyeMat = MakeMaterial(Color.black);
+            eyeMat.EnableKeyword("_EMISSION");
+            var eyeL = Visual(PrimitiveType.Sphere, "Eye L", hound.transform, new Vector3(-0.12f, 0.95f, 0.97f), Vector3.one * 0.08f, eyeMat);
+            var eyeR = Visual(PrimitiveType.Sphere, "Eye R", hound.transform, new Vector3(0.12f, 0.95f, 0.97f), Vector3.one * 0.08f, eyeMat);
+
+            var lockOn = hound.AddComponent<LockOnTarget>();
+            SetVector(lockOn, "offset", new Vector3(0f, 0.8f, 0f));
+            var dummy = hound.AddComponent<TrainingDummy>();
+            SetFloat(dummy, "respawnTime", 20f);
+
+            var agent = hound.AddComponent<UnityEngine.AI.NavMeshAgent>();
+            agent.radius = 0.5f;
+            agent.height = 1.2f;
+            agent.baseOffset = 0f;
+            agent.acceleration = 30f;
+            agent.angularSpeed = 0f;
+            agent.enabled = false;
+
+            var fur = GetOrCreateItem("AshenFur", "잿빛 털", "잿빛 들개의 거친 털. 흔한 소재.", 1);
+            var tooth = GetOrCreateItem("HoundFang", "들개 이빨", "날카로운 송곳니. 무기 강화에 쓴다.", 1);
+            var rewards = hound.AddComponent<MonsterRewards>();
+            rewards.EditorSetup(
+                new List<MonsterRewards.Reward>
+                {
+                    new() { item = fur, min = 1, max = 2 },
+                    new() { item = tooth, min = 1, max = 1, chance = 0.6f },
+                },
+                new List<MonsterRewards.PartReward>(),
+                announce: false);
+            EditorUtility.SetDirty(rewards);
+
+            var ai = hound.AddComponent<EnemyAI>();
+            ai.EditorSetup(new List<EnemyAttack>
+            {
+                //   이름     최소/최대거리  각도  가중치 쿨  피해 강인  예고   판정   빈틈  추적 전진  전진구간              판정중심              판정크기
+                new("Bite",   0f, 2.6f,  70f, 3f,   0f, 14f, 10f, 0.45f, 0.15f, 0.70f, 0f, 0f, Vector2.zero,      new(0f, 0.6f, 1.2f), new(1.2f, 1.2f, 1.4f)),
+                new("Pounce", 3.5f, 8f,  30f, 1.5f, 4f, 20f, 20f, 0.65f, 0.35f, 1.00f, 0f, 4f, new(0.65f, 1.0f), new(0f, 0.6f, 0.9f), new(1.4f, 1.2f, 1.4f), isDash: true),
+            }, speed: 5f, engage: 2f, aggro: 11f, staggerTime: 1f, enrageAt: 0f);
+            EditorUtility.SetDirty(ai);
+            SetRef(ai, "telegraphMaterial", GetOrCreateTelegraphMaterial());
+            var so = new SerializedObject(ai);
+            var arr = so.FindProperty("telegraphRenderers");
+            arr.arraySize = 2;
+            arr.GetArrayElementAtIndex(0).objectReferenceValue = eyeL.GetComponent<Renderer>();
+            arr.GetArrayElementAtIndex(1).objectReferenceValue = eyeR.GetComponent<Renderer>();
+            so.ApplyModifiedPropertiesWithoutUndo();
         }
 
         /// <summary>무기 강화 단계(재료)와 저장 시스템을 플레이어에 붙인다.</summary>
@@ -275,26 +384,40 @@ namespace SoulsHunter.EditorTools
             var gem = GetOrCreateItem("RavagerGem", "철갑의 보옥", "몸속에서 드물게 자라는 보석. 아주 귀하다.", 6);
             var fang = GetOrCreateItem("RavagerFang", "강철 엄니", "머리를 파괴해야 얻을 수 있는 엄니.", 3);
             var spike = GetOrCreateItem("RavagerTailSpike", "꼬리 가시", "꼬리를 파괴해야 얻을 수 있는 가시.", 3);
+            var fur = GetOrCreateItem("AshenFur", "잿빛 털", "잿빛 들개의 거친 털. 흔한 소재.", 1);
+            var tooth = GetOrCreateItem("HoundFang", "들개 이빨", "날카로운 송곳니. 무기 강화에 쓴다.", 1);
 
-            static PlayerWeapon.UpgradeStep Step(float bonus, params (ItemData item, int amount)[] costs)
+            static UpgradableEquipment.UpgradeStep Step(float bonus, params (ItemData item, int amount)[] costs)
             {
-                var step = new PlayerWeapon.UpgradeStep { damageBonus = bonus };
-                foreach (var (item, amount) in costs) step.costs.Add(new PlayerWeapon.Cost { item = item, amount = amount });
+                var step = new UpgradableEquipment.UpgradeStep { bonus = bonus };
+                foreach (var (item, amount) in costs) step.costs.Add(new UpgradableEquipment.Cost { item = item, amount = amount });
                 return step;
             }
 
+            // 무기: 피해 +15% / +15% / +20% / +25%
             var weapon = player.AddComponent<PlayerWeapon>();
-            weapon.EditorSetup("헌터의 대검", new List<PlayerWeapon.UpgradeStep>
+            weapon.EditorSetup("헌터의 대검", new List<UpgradableEquipment.UpgradeStep>
             {
-                Step(0.15f, (scale, 2), (hide, 1)),
-                Step(0.15f, (scale, 3), (hide, 2), (fang, 1)),
-                Step(0.20f, (scale, 4), (spike, 1), (fang, 2)),
-                Step(0.25f, (hide, 4), (spike, 2), (gem, 1)),
+                Step(0.15f, (fur, 2), (tooth, 2)),
+                Step(0.15f, (scale, 3), (hide, 1), (tooth, 2)),
+                Step(0.20f, (scale, 4), (fang, 1), (hide, 2)),
+                Step(0.25f, (fang, 2), (spike, 2), (gem, 1)),
             });
             EditorUtility.SetDirty(weapon);
 
+            // 방어구: 받는 피해 -8% / -8% / -10% / -12%
+            var armor = player.AddComponent<PlayerArmor>();
+            armor.EditorSetup("헌터의 가죽갑옷", new List<UpgradableEquipment.UpgradeStep>
+            {
+                Step(0.08f, (fur, 3)),
+                Step(0.08f, (fur, 4), (hide, 2)),
+                Step(0.10f, (scale, 4), (hide, 3)),
+                Step(0.12f, (scale, 5), (spike, 1), (gem, 1)),
+            });
+            EditorUtility.SetDirty(armor);
+
             var save = player.AddComponent<SaveSystem>();
-            save.EditorSetup(new List<ItemData> { scale, hide, gem, fang, spike });
+            save.EditorSetup(new List<ItemData> { scale, hide, gem, fang, spike, fur, tooth });
             EditorUtility.SetDirty(save);
         }
 

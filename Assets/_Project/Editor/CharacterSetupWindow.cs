@@ -582,8 +582,11 @@ namespace SoulsHunter.EditorTools
             float runSpeed = ReadFloat<PlayerLocomotion>(player, "runSpeed", 4.5f);
             float drinkDuration = ReadFloat<PlayerFlask>(player, "drinkDuration", 1.1f);
             float staggerDuration = ReadFloat<PlayerDamageHandler>(player, "staggerDuration", 0.6f);
+            // 열린 Animator 창이 지워진 옛 컨트롤러를 그리려다 NullReferenceException을 내므로 먼저 닫는다
+            bool reopenAnimatorWindow = CloseAnimatorWindows();
             if (AssetDatabase.LoadAssetAtPath<Object>(ControllerPath)) AssetDatabase.DeleteAsset(ControllerPath);
             var ctrl = AnimatorController.CreateAnimatorControllerAtPath(ControllerPath);
+            if (reopenAnimatorWindow) EditorApplication.delayCall += () => EditorApplication.ExecuteMenuItem("Window/Animation/Animator");
 
             foreach (var f in new[] { "Speed", "MoveX", "MoveY", "AttackTime", "DodgeTime" })
                 ctrl.AddParameter(f, AnimatorControllerParameterType.Float);
@@ -908,6 +911,21 @@ namespace SoulsHunter.EditorTools
             if (p == null) { Debug.LogError($"[Character Setup] {owner.GetType().Name}.{field} 없음"); return; }
             p.objectReferenceValue = value;
             so.ApplyModifiedProperties();
+        }
+
+        /// <returns>닫은 창이 있으면 true</returns>
+        static bool CloseAnimatorWindows()
+        {
+            bool closed = false;
+            foreach (var w in Resources.FindObjectsOfTypeAll<EditorWindow>())
+            {
+                if (w && w.GetType().Name == "AnimatorControllerTool")
+                {
+                    w.Close();
+                    closed = true;
+                }
+            }
+            return closed;
         }
 
         static void EnsureFolder()

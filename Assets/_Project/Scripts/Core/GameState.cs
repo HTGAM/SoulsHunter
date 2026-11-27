@@ -13,6 +13,11 @@ namespace SoulsHunter.Core
         /// <summary>일시정지 메뉴가 씬에 있으면 true (없으면 카메라가 ESC로 커서만 푼다)</summary>
         public static bool PauseMenuAvailable { get; set; }
 
+        /// <summary>
+        /// 사냥 퀘스트 진행 중이면 true. 이때는 플레이어가 쓰러져도 몬스터가 회복·리셋되지 않는다 (몬헌식).
+        /// </summary>
+        public static bool QuestActive { get; set; }
+
         /// <summary>(멈췄는지)</summary>
         public static event Action<bool> PauseChanged;
 
@@ -30,6 +35,7 @@ namespace SoulsHunter.Core
         {
             IsPaused = false;
             PauseMenuAvailable = false;
+            QuestActive = false;
             PauseChanged = null;
         }
     }

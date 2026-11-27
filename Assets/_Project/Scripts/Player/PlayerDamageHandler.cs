@@ -84,7 +84,8 @@ namespace SoulsHunter.Player
             health.ResetHealth();
             if (stamina) stamina.Refill();
             locomotion.Animator.TrySetBool(DeadHash, false);
-            GameEvents.RaiseWorldReset(); // 소울류: 죽으면 적들도 부활
+            // 소울류: 죽으면 적들도 부활. 단, 사냥 퀘스트 중에는 몬스터가 그대로 남는다 (몬헌식)
+            if (!GameState.QuestActive) GameEvents.RaiseWorldReset();
             Respawned?.Invoke();
         }
 

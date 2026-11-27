@@ -30,6 +30,9 @@ namespace SoulsHunter.World
 
         public override string Prompt => IsLit ? "휴식한다" : "화톳불을 밝힌다";
 
+        // 사냥 퀘스트 중에는 쉴 수 없다 (쉬면 몬스터가 회복되므로)
+        public override bool CanInteract(GameObject player) => base.CanInteract(player) && !GameState.QuestActive;
+
         void Awake() => SetLit(litAtStart);
 
         void Update()

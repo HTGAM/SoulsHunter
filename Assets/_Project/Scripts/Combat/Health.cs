@@ -13,6 +13,8 @@ namespace SoulsHunter.Combat
         public GameObject Source;
         /// <summary>맞은 부위 이름 (Hurtbox.PartName)</summary>
         public string Part;
+        /// <summary>부위 데미지 배율 (약점 > 1, 단단한 부위 < 1). Hurtbox를 거치지 않았으면 0.</summary>
+        public float PartMultiplier;
     }
 
     /// <summary>
@@ -66,6 +68,12 @@ namespace SoulsHunter.Combat
         }
 
         public event Action<DamageInfo> Damaged;
+
+        /// <summary>어떤 Health든 피해를 입었을 때 (데미지 숫자 표시 등)</summary>
+        public static event Action<Health, DamageInfo> AnyDamaged;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetStatics() => AnyDamaged = null;
         public event Action<DamageInfo> Staggered;
         public event Action Died;
         /// <summary>(현재값, 최대값)</summary>
@@ -92,6 +100,7 @@ namespace SoulsHunter.Combat
             Current = Mathf.Max(0f, Current - info.Amount);
             Changed?.Invoke(Current, maxHealth);
             Damaged?.Invoke(info);
+            AnyDamaged?.Invoke(this, info);
 
             if (maxPoise > 0f && info.PoiseDamage > 0f)
             {

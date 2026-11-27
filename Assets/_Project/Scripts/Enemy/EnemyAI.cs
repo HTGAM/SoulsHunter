@@ -157,7 +157,12 @@ namespace SoulsHunter.Enemy
             // 플레이어가 죽으면 보스 리셋
             if (targetHealth && targetHealth.IsDead)
             {
-                if (state != State.Idle) ResetToSpawn();
+                if (state != State.Idle)
+                {
+                    // 퀘스트 중에는 체력을 유지한 채 공격만 멈춘다 (몬헌식)
+                    if (GameState.QuestActive) StandDown();
+                    else ResetToSpawn();
+                }
                 UpdateTelegraph();
                 return;
             }
@@ -359,6 +364,14 @@ namespace SoulsHunter.Enemy
             transform.rotation = spawnRotation;
             state = State.Idle;
             ClearEnrage();
+        }
+
+        /// <summary>그 자리에서 공격을 멈추고 대기 (체력·분노 유지)</summary>
+        void StandDown()
+        {
+            state = State.Idle;
+            current = null;
+            if (agent.isOnNavMesh) { agent.isStopped = true; agent.ResetPath(); }
         }
 
         void ResetToSpawn()

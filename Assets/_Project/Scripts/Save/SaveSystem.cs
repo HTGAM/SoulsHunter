@@ -11,7 +11,7 @@ namespace SoulsHunter.Save
 {
     /// <summary>
     /// 진행 상황 저장/불러오기 (JSON, Application.persistentDataPath/save.json).
-    /// 저장하는 것: 가방, 무기·방어구 강화 단계, 불 붙인 화톳불, 마지막으로 쉰 화톳불.
+    /// 저장하는 것: 가방, 무기·방어구 강화 단계, 클리어한 퀘스트, 불 붙인 화톳불, 마지막으로 쉰 화톳불.
     /// - 시작할 때 불러오고, 마지막 화톳불 앞에서 시작한다.
     /// - 화톳불 휴식, 무기 강화 때 바로 저장. 아이템을 얻으면 잠시 뒤 자동 저장. 게임을 끌 때도 저장.
     /// 플레이어 오브젝트에 붙인다.
@@ -37,6 +37,7 @@ namespace SoulsHunter.Save
             public int armorLevel;
             public List<string> litBonfires = new();
             public string lastBonfire = "";
+            public List<string> clearedQuests = new();
         }
 
         [Serializable]
@@ -119,6 +120,9 @@ namespace SoulsHunter.Save
             if (armor) data.armorLevel = armor.Level;
             foreach (var b in FindObjectsByType<Bonfire>(FindObjectsSortMode.None))
                 if (b.IsLit) data.litBonfires.Add(b.BonfireName);
+            foreach (var board in FindObjectsByType<QuestBoard>(FindObjectsSortMode.None))
+                foreach (var id in board.ClearedIds)
+                    if (!data.clearedQuests.Contains(id)) data.clearedQuests.Add(id);
 
             try
             {
@@ -166,6 +170,10 @@ namespace SoulsHunter.Save
 
                 if (weapon) weapon.SetLevel(data.weaponLevel);
                 if (armor) armor.SetLevel(data.armorLevel);
+
+                if (data.clearedQuests != null)
+                    foreach (var board in FindObjectsByType<QuestBoard>(FindObjectsSortMode.None))
+                        board.RestoreCleared(data.clearedQuests);
 
                 lastBonfire = data.lastBonfire ?? "";
                 foreach (var b in FindObjectsByType<Bonfire>(FindObjectsSortMode.None))

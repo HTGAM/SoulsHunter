@@ -39,6 +39,7 @@ namespace SoulsHunter.Combat
             if (!health) return false;
             info.Amount *= damageMultiplier;
             info.Part = partName;
+            info.PartMultiplier = damageMultiplier;
             if (!health.TakeDamage(info)) return false;
 
             if (breakThreshold > 0f && !IsBroken)

@@ -125,8 +125,38 @@ namespace SoulsHunter.CameraSystem
                 ? allowed // 벽에 막히면 즉시 당김
                 : Mathf.MoveTowards(currentDistance, allowed, distanceReturnSpeed * dt);
 
-            transform.SetPositionAndRotation(pivot + back * currentDistance, rotation);
+            transform.SetPositionAndRotation(pivot + back * currentDistance + ShakeOffset(rotation), rotation);
             UpdateMarker();
+        }
+
+        // ───────── 흔들림 ─────────
+
+        [Header("Shake")]
+        [Tooltip("흔들림 세기 전체 배율 (0이면 끔)")]
+        [SerializeField] float shakeScale = 1f;
+        [SerializeField] float shakeFrequency = 25f;
+
+        float shakeStrength, shakeDuration, shakeTime;
+
+        /// <summary>카메라를 흔든다. strength는 최대 이동 거리(m). 더 센 흔들림이 우선한다.</summary>
+        public void Shake(float strength, float duration)
+        {
+            float remaining = shakeDuration > 0f ? shakeStrength * (1f - shakeTime / shakeDuration) : 0f;
+            if (strength < remaining) return;
+            shakeStrength = strength;
+            shakeDuration = Mathf.Max(0.01f, duration);
+            shakeTime = 0f;
+        }
+
+        Vector3 ShakeOffset(Quaternion rotation)
+        {
+            if (shakeTime >= shakeDuration || shakeScale <= 0f || SoulsHunter.Core.GameState.IsPaused) return Vector3.zero;
+            shakeTime += Time.unscaledDeltaTime; // 히트스톱 중에도 흔들린다
+            float fade = 1f - Mathf.Clamp01(shakeTime / shakeDuration);
+            float s = shakeStrength * shakeScale * fade * fade;
+            float t = Time.unscaledTime * shakeFrequency;
+            var local = new Vector3(Mathf.PerlinNoise(t, 0.3f) - 0.5f, Mathf.PerlinNoise(0.7f, t) - 0.5f, 0f) * (2f * s);
+            return rotation * local;
         }
 
         // ───────── 락온 ─────────

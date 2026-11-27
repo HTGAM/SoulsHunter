@@ -28,7 +28,7 @@ namespace SoulsHunter.UI
         static readonly Color BonfireBannerColor = new(1f, 0.82f, 0.45f);
         static readonly Color HuntBannerColor = new(0.95f, 0.85f, 0.55f);
 
-        Text flaskText, promptText, bannerText, inventoryText;
+        Text flaskText, promptText, bannerText, inventoryText, questText;
         GameObject promptRoot, inventoryRoot;
         RectTransform toastRoot;
         Font font;
@@ -60,6 +60,8 @@ namespace SoulsHunter.UI
             Bonfire.Rested += OnRested;
             GameEvents.Notified += AddToast;
             MonsterRewards.Slain += OnMonsterSlain;
+            QuestBoard.QuestStarted += OnQuestStarted;
+            QuestBoard.QuestEnded += OnQuestEnded;
         }
 
         void OnDestroy()
@@ -67,6 +69,43 @@ namespace SoulsHunter.UI
             Bonfire.Rested -= OnRested;
             GameEvents.Notified -= AddToast;
             MonsterRewards.Slain -= OnMonsterSlain;
+            QuestBoard.QuestStarted -= OnQuestStarted;
+            QuestBoard.QuestEnded -= OnQuestEnded;
+        }
+
+        void OnQuestStarted(HuntQuest quest) =>
+            ShowBanner($"QUEST START\n<size=36>{quest.title}</size>", HuntBannerColor);
+
+        void OnQuestEnded(HuntQuest quest, bool success, float time)
+        {
+            if (success)
+            {
+                ShowBanner($"QUEST CLEAR\n<size=36>{quest.title}  ·  {FormatTime(time)}</size>", HuntBannerColor);
+                AddToast($"<color=#FFD27A>{quest.title}</color> 클리어 ({FormatTime(time)})");
+            }
+            else ShowBanner($"QUEST FAILED\n<size=36>{quest.title}</size>", new Color(0.85f, 0.3f, 0.25f));
+        }
+
+        static string FormatTime(float seconds)
+        {
+            int s = Mathf.Max(0, Mathf.FloorToInt(seconds));
+            return $"{s / 60:00}:{s % 60:00}";
+        }
+
+        void UpdateQuestTracker()
+        {
+            var board = QuestBoard.Running;
+            var quest = board ? board.ActiveQuest : null;
+            questText.gameObject.SetActive(quest != null);
+            if (quest == null) return;
+
+            float remaining = board.Remaining;
+            string timeColor = remaining < 60f ? "FF6A5A" : "FFFFFF";
+            questText.text =
+                $"<b>{quest.title}</b>\n" +
+                $"<size=20>남은 시간  <color=#{timeColor}>{FormatTime(remaining)}</color>\n" +
+                $"토벌  {board.Kills} / {quest.requiredKills}\n" +
+                $"쓰러진 횟수  {board.Faints} / {quest.maxFaints}</size>";
         }
 
         void Update()
@@ -77,6 +116,7 @@ namespace SoulsHunter.UI
             if (armor) status = $"<size=20><color=#CCCCCC>{armor.DisplayName}</color></size>\n{status}";
             if (weapon) status = $"<size=20><color=#CCCCCC>{weapon.DisplayName}</color></size>\n{status}";
             flaskText.text = status;
+            UpdateQuestTracker();
 
             var target = interactor ? interactor.Current : null;
             promptRoot.SetActive(target);
@@ -177,6 +217,12 @@ namespace SoulsHunter.UI
             flaskText = MakeText(root, "Flask", 26, TextAnchor.LowerLeft);
             Place(flaskText.rectTransform, new Vector2(0f, 0f), new Vector2(60f, 50f), new Vector2(400f, 40f));
             flaskText.color = new Color(1f, 0.75f, 0.35f);
+
+            // 퀘스트 진행 (오른쪽 위)
+            questText = MakeText(root, "Quest", 26, TextAnchor.UpperRight);
+            Place(questText.rectTransform, new Vector2(1f, 1f), new Vector2(-60f, -50f), new Vector2(520f, 160f));
+            questText.color = new Color(0.95f, 0.9f, 0.78f);
+            questText.gameObject.SetActive(false);
 
             // 상호작용 안내 (가운데 아래)
             promptRoot = MakePanel(root, "Prompt", new Color(0f, 0f, 0f, 0.65f));

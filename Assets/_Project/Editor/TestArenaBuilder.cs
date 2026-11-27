@@ -22,7 +22,7 @@ namespace SoulsHunter.EditorTools
     /// </summary>
     public static class TestArenaBuilder
     {
-        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD", "Bonfire", "Forge", "Armor Bench" };
+        static readonly string[] GeneratedRoots = { "Arena", "Player", "Dummies", "LockOnMarker", "HUD", "Bonfire", "Forge", "Armor Bench", "Quest Board" };
 
         [MenuItem("SoulsHunter/Delete Save Data")]
         static void DeleteSaveData()
@@ -99,6 +99,7 @@ namespace SoulsHunter.EditorTools
             }
             var tpc = cam.GetComponent<ThirdPersonCamera>();
             if (!tpc) tpc = Undo.AddComponent<ThirdPersonCamera>(cam.gameObject);
+            if (!cam.GetComponent<CameraFeedback>()) Undo.AddComponent<CameraFeedback>(cam.gameObject);
             Undo.RecordObject(cam.transform, "camera");
             cam.transform.SetPositionAndRotation(new Vector3(0f, 2.5f, -4.5f), Quaternion.Euler(12f, 0f, 0f));
 
@@ -117,6 +118,7 @@ namespace SoulsHunter.EditorTools
             SetRef(hud, "playerCamera", tpc);
             hud.gameObject.AddComponent<GameplayHUD>();
             hud.gameObject.AddComponent<PauseMenu>();
+            hud.gameObject.AddComponent<DamageNumbers>();
 
             // 화톳불 (시작 지점 옆)
             BuildBonfire(new Vector3(-3f, 0f, -3f));
@@ -125,17 +127,20 @@ namespace SoulsHunter.EditorTools
             var dummies = Create("Dummies");
             Dummy(dummies.transform, "Dummy A", new Vector3(-3f, 0f, 7f), 1f, 150f, enemyMat);
             Dummy(dummies.transform, "Dummy B", new Vector3(3f, 0f, 9f), 1f, 150f, enemyMat);
-            BuildBoss(dummies.transform, new Vector3(0f, 0f, 20f), enemyMat, weakMat);
+            var boss = BuildBoss(dummies.transform, new Vector3(0f, 0f, 20f), enemyMat, weakMat);
 
             // 잡몹: 잿빛 들개 (초반 강화 소재)
             var houndMat = MakeMaterial(new Color(0.45f, 0.42f, 0.4f));
-            BuildHound(dummies.transform, "Ashen Hound A", new Vector3(-9f, 0f, 11f), houndMat, weakMat);
-            BuildHound(dummies.transform, "Ashen Hound B", new Vector3(9f, 0f, 12f), houndMat, weakMat);
+            var houndA = BuildHound(dummies.transform, "Ashen Hound A", new Vector3(-9f, 0f, 11f), houndMat, weakMat);
+            var houndB = BuildHound(dummies.transform, "Ashen Hound B", new Vector3(9f, 0f, 12f), houndMat, weakMat);
 
             // 대장간(무기) + 방어구 작업대 + 장비 강화 + 저장
             BuildForge(new Vector3(3f, 0f, -4f));
             BuildArmorBench(new Vector3(6f, 0f, -6.5f));
             SetupProgression(player);
+
+            // 퀘스트 게시판
+            BuildQuestBoard(new Vector3(-6f, 0f, -5f), boss, houndA, houndB);
 
             Selection.activeGameObject = player;
             Undo.CollapseUndoOperations(group);
@@ -147,7 +152,7 @@ namespace SoulsHunter.EditorTools
         /// 네 발 몬스터 보스. 루트는 발 위치(크기 1), 몸 부위는 자식으로 둔다.
         /// 부위마다 Hurtbox: 머리(약점·파괴), 꼬리(파괴), 다리(단단함), 몸통.
         /// </summary>
-        static void BuildBoss(Transform parent, Vector3 pos, Material bodyMat, Material weakMat)
+        static Health BuildBoss(Transform parent, Vector3 pos, Material bodyMat, Material weakMat)
         {
             var boss = Create("Ravager");
             boss.transform.SetParent(parent, false);
@@ -215,6 +220,7 @@ namespace SoulsHunter.EditorTools
             arr.GetArrayElementAtIndex(0).objectReferenceValue = eyeL.GetComponent<Renderer>();
             arr.GetArrayElementAtIndex(1).objectReferenceValue = eyeR.GetComponent<Renderer>();
             so.ApplyModifiedPropertiesWithoutUndo();
+            return health;
         }
 
         static void BuildBonfire(Vector3 pos)
@@ -279,6 +285,59 @@ namespace SoulsHunter.EditorTools
             EditorUtility.SetDirty(forge);
         }
 
+        /// <summary>퀘스트 게시판: 기둥 두 개 + 판자 + 의뢰서. 들개 사냥 → Ravager 토벌 순서.</summary>
+        static void BuildQuestBoard(Vector3 pos, Health boss, Health houndA, Health houndB)
+        {
+            var root = Create("Quest Board");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.Euler(0f, 30f, 0f);
+
+            var woodMat = MakeMaterial(new Color(0.38f, 0.27f, 0.18f));
+            var paperMat = MakeMaterial(new Color(0.92f, 0.87f, 0.72f));
+            Primitive(PrimitiveType.Cube, "Post L", root.transform, new Vector3(-0.9f, 1f, 0f), new Vector3(0.15f, 2f, 0.15f), woodMat);
+            Primitive(PrimitiveType.Cube, "Post R", root.transform, new Vector3(0.9f, 1f, 0f), new Vector3(0.15f, 2f, 0.15f), woodMat);
+            Primitive(PrimitiveType.Cube, "Board", root.transform, new Vector3(0f, 1.45f, 0f), new Vector3(1.9f, 1.1f, 0.08f), woodMat);
+            Visual(PrimitiveType.Cube, "Notice A", root.transform, new Vector3(-0.45f, 1.5f, -0.05f), new Vector3(0.55f, 0.7f, 0.02f), paperMat);
+            Visual(PrimitiveType.Cube, "Notice B", root.transform, new Vector3(0.4f, 1.4f, -0.05f), new Vector3(0.5f, 0.6f, 0.02f), paperMat);
+
+            var fur = GetOrCreateItem("AshenFur", "잿빛 털", "잿빛 들개의 거친 털. 흔한 소재.", 1);
+            var tooth = GetOrCreateItem("HoundFang", "들개 이빨", "날카로운 송곳니. 무기 강화에 쓴다.", 1);
+            var scale = GetOrCreateItem("RavagerScale", "철갑 비늘", "Ravager의 단단한 비늘. 방어구 소재.", 2);
+            var hide = GetOrCreateItem("RavagerHide", "철갑 가죽", "질기고 무거운 가죽.", 2);
+            var gem = GetOrCreateItem("RavagerGem", "철갑의 보옥", "몸속에서 드물게 자라는 보석. 아주 귀하다.", 6);
+
+            var board = root.AddComponent<QuestBoard>();
+            board.EditorSetup(new List<HuntQuest>
+            {
+                new()
+                {
+                    id = "hunt_hounds", title = "잿빛 들개 사냥",
+                    description = "아레나를 떠도는 잿빛 들개 두 마리를 사냥하라.",
+                    targets = new() { houndA, houndB }, requiredKills = 2,
+                    timeLimit = 600f, maxFaints = 3,
+                    rewards = new()
+                    {
+                        new() { item = fur, min = 2, max = 3 },
+                        new() { item = tooth, min = 1, max = 2 },
+                    },
+                },
+                new()
+                {
+                    id = "hunt_ravager", title = "철갑의 포식자",
+                    description = "Ravager, the Iron Maw를 토벌하라.",
+                    targets = new() { boss }, requiredKills = 1,
+                    timeLimit = 900f, maxFaints = 3,
+                    rewards = new()
+                    {
+                        new() { item = scale, min = 2, max = 3 },
+                        new() { item = hide, min = 1, max = 2 },
+                        new() { item = gem, min = 1, max = 1, chance = 0.3f },
+                    },
+                },
+            });
+            EditorUtility.SetDirty(board);
+        }
+
         /// <summary>방어구 작업대: 탁자 + 갑옷 걸이. 방어구를 강화한다.</summary>
         static void BuildArmorBench(Vector3 pos)
         {
@@ -315,7 +374,7 @@ namespace SoulsHunter.EditorTools
         /// 잡몹 '잿빛 들개'. 빠르고 약하다. 물기(근거리)와 덮치기(돌진).
         /// 초반 강화 소재(털, 이빨)를 준다. 토벌 배너는 띄우지 않는다.
         /// </summary>
-        static void BuildHound(Transform parent, string name, Vector3 pos, Material bodyMat, Material weakMat)
+        static Health BuildHound(Transform parent, string name, Vector3 pos, Material bodyMat, Material weakMat)
         {
             var hound = Create(name);
             hound.transform.SetParent(parent, false);
@@ -378,6 +437,7 @@ namespace SoulsHunter.EditorTools
             arr.GetArrayElementAtIndex(0).objectReferenceValue = eyeL.GetComponent<Renderer>();
             arr.GetArrayElementAtIndex(1).objectReferenceValue = eyeR.GetComponent<Renderer>();
             so.ApplyModifiedPropertiesWithoutUndo();
+            return health;
         }
 
         /// <summary>무기 강화 단계(재료)와 저장 시스템을 플레이어에 붙인다.</summary>

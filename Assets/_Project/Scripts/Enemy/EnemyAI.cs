@@ -30,6 +30,12 @@ namespace SoulsHunter.Enemy
         [SerializeField] float engageDistance = 4f;
         [Tooltip("0보다 크면 원거리형: 이 거리를 유지하려 하고, 너무 가까우면 뒤로 물러난다")]
         [SerializeField] float preferredRange = 0f;
+        [Tooltip("물러날 때 속도 배율 (이동 속도 기준). 작을수록 따라잡기 쉽다")]
+        [SerializeField, Range(0.1f, 1f)] float retreatSpeedMultiplier = 0.4f;
+        [Tooltip("한 번 물러나는 시간(초)")]
+        [SerializeField] float retreatDuration = 1.2f;
+        [Tooltip("물러난 뒤 다시 물러나기까지 쉬는 시간(초). 이 사이에는 붙어도 제자리에서 싸운다")]
+        [SerializeField] float retreatCooldown = 4f;
 
         [Header("Behaviour")]
         [Tooltip("공격 사이 쉬는 시간(초) 범위")]
@@ -97,6 +103,7 @@ namespace SoulsHunter.Enemy
         bool hitLanded;
         bool enraged;
         bool forceAggro;
+        float retreatUntil, nextRetreatTime;
         Vector3 spawnPosition;
         Quaternion spawnRotation;
 
@@ -218,14 +225,26 @@ namespace SoulsHunter.Enemy
                 if (attack != null) { StartAttack(attack); return; }
             }
 
-            if (preferredRange > 0f && dist < preferredRange * 0.55f)
+            // 원거리형: 너무 가까우면 잠깐 천천히 물러난다. 한 번 물러난 뒤에는 한동안 제자리에서 싸운다.
+            bool tooClose = preferredRange > 0f && dist < preferredRange * 0.55f;
+            if (tooClose && Time.time >= nextRetreatTime && Time.time >= retreatUntil)
             {
-                // 원거리형: 너무 가까우면 플레이어 반대쪽으로 물러난다 (몸은 플레이어를 본 채로)
+                retreatUntil = Time.time + retreatDuration;
+                nextRetreatTime = retreatUntil + retreatCooldown;
+            }
+            bool retreating = tooClose && Time.time < retreatUntil;
+
+            if (retreating)
+            {
                 Vector3 away = dist > 0.01f ? -toTarget / dist : -transform.forward;
+                agent.speed = BaseMoveSpeed * retreatSpeedMultiplier;
                 agent.isStopped = false;
                 agent.SetDestination(Feet + away * 5f);
+                return;
             }
-            else if (dist > (preferredRange > 0f ? preferredRange : engageDistance))
+
+            agent.speed = BaseMoveSpeed;
+            if (dist > (preferredRange > 0f ? preferredRange : engageDistance))
             {
                 agent.isStopped = false;
                 agent.SetDestination(target.position);
@@ -235,6 +254,8 @@ namespace SoulsHunter.Enemy
                 agent.isStopped = true;
             }
         }
+
+        float BaseMoveSpeed => moveSpeed * (enraged ? enrageMoveSpeed : 1f);
 
         EnemyAttack ChooseAttack(float dist, float angle)
         {

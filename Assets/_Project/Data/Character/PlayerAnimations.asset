@@ -12,6 +12,10 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: fae806fca114a3f41b43afe9d8e942ef, type: 3}
   m_Name: PlayerAnimations
   m_EditorClassIdentifier: 
+  matchAttackDurationToClip: 1
+  attackPlaybackSpeed: 1.2
+  hitWindow: 0.08
+  multiHitTotalDamage: 1.3
   idle: {fileID: -203655887218126122, guid: 9fd4bff605e20ee41ae22f5a47c6283f, type: 3}
   walk: {fileID: -203655887218126122, guid: 38282da0e5d8ab045a6209d8dcae9c89, type: 3}
   run: {fileID: -203655887218126122, guid: 356c519bdcb78ee4d822b400771def81, type: 3}
@@ -35,44 +39,75 @@ MonoBehaviour:
     type: 0
     comboIndex: -1
     clip: {fileID: -203655887218126122, guid: c410288edbc3b53448c732421800d36c, type: 3}
-    impactPoint: 0.4
-  - weapon: {fileID: 0}
-    type: 0
-    comboIndex: -1
-    clip: {fileID: -203655887218126122, guid: 2617e164616bacf4ab20b65017dd64c6, type: 3}
-    impactPoint: 0.4
+    impactPoint: 0.39999998
+    speed: 1
+    hitPoints:
+    - 0.39999998
   - weapon: {fileID: 0}
     type: 0
     comboIndex: -1
     clip: {fileID: -203655887218126122, guid: 22fa29715cef4574f89bafe9103b5f63, type: 3}
-    impactPoint: 0.4
+    impactPoint: 0.5
+    speed: 1
+    hitPoints:
+    - 0.5
   - weapon: {fileID: 0}
     type: 0
     comboIndex: -1
-    clip: {fileID: -203655887218126122, guid: 0030b774e589fee4895d536ea8a2a4ce, type: 3}
-    impactPoint: 0.4
-  - weapon: {fileID: 0}
-    type: 0
-    comboIndex: -1
-    clip: {fileID: -203655887218126122, guid: 7b9c09eb5a4bb3544baeb1e45174c1e7, type: 3}
-    impactPoint: 0.4
-  - weapon: {fileID: 0}
-    type: 1
-    comboIndex: -1
-    clip: {fileID: -203655887218126122, guid: 3882b166ba197c141a0ad6e2433c14ca, type: 3}
-    impactPoint: 0.45
+    clip: {fileID: -203655887218126122, guid: a8f1e576b94c88248a8878379fc0f465, type: 3}
+    impactPoint: 0.43333337
+    speed: 1
+    hitPoints:
+    - 0.43333337
   - weapon: {fileID: 0}
     type: 1
     comboIndex: -1
     clip: {fileID: -203655887218126122, guid: c7ef92e76c428334fbb4dd0b6b8bb109, type: 3}
-    impactPoint: 0.45
+    impactPoint: 0.25641024
+    speed: 1
+    hitPoints:
+    - 0.25641024
+    - 0.4871795
+  - weapon: {fileID: 0}
+    type: 1
+    comboIndex: -1
+    clip: {fileID: -203655887218126122, guid: 3882b166ba197c141a0ad6e2433c14ca, type: 3}
+    impactPoint: 0.19285715
+    speed: 1
+    hitPoints:
+    - 0.19285715
+    - 0.49285713
+  - weapon: {fileID: 0}
+    type: 1
+    comboIndex: -1
+    clip: {fileID: -203655887218126122, guid: 0030b774e589fee4895d536ea8a2a4ce, type: 3}
+    impactPoint: 0.5410959
+    speed: 1
+    hitPoints:
+    - 0.5410959
+  - weapon: {fileID: 0}
+    type: 1
+    comboIndex: -1
+    clip: {fileID: -203655887218126122, guid: 2617e164616bacf4ab20b65017dd64c6, type: 3}
+    impactPoint: 0.18867925
+    speed: 1
+    hitPoints:
+    - 0.18867925
+    - 0.3537736
+    - 0.6839623
+  - weapon: {fileID: 0}
+    type: 1
+    comboIndex: -1
+    clip: {fileID: -203655887218126122, guid: 7b9c09eb5a4bb3544baeb1e45174c1e7, type: 3}
+    impactPoint: 0.42682925
+    speed: 1
+    hitPoints:
+    - 0.42682925
   - weapon: {fileID: 0}
     type: 1
     comboIndex: -1
     clip: {fileID: -203655887218126122, guid: 34471202f20246d429beabf60860be04, type: 3}
-    impactPoint: 0.45
-  - weapon: {fileID: 0}
-    type: 1
-    comboIndex: -1
-    clip: {fileID: -203655887218126122, guid: a8f1e576b94c88248a8878379fc0f465, type: 3}
-    impactPoint: 0.45
+    impactPoint: 0.44230768
+    speed: 1
+    hitPoints:
+    - 0.44230768

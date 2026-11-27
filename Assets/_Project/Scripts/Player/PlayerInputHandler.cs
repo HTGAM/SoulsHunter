@@ -7,7 +7,7 @@ namespace SoulsHunter.Player
     /// 키보드/마우스와 게임패드 입력을 한 곳에서 읽어 다른 컴포넌트에 넘겨준다.
     /// 키 배치는 코드에 정의되어 있어 별도 에셋 없이 동작한다.
     ///
-    /// 키보드/마우스: WASD 이동, 마우스 시점, Shift 달리기, Space 구르기, Q/휠클릭 락온,
+    /// 키보드/마우스: WASD 이동, 마우스 시점, Space 짧게=구르기 / 길게=달리기, Q/휠클릭 락온,
     ///                좌클릭 약공격, 우클릭 강공격(누르고 있으면 모으기), Ctrl 가드(누르는 순간 패링), F 무기 특수 행동,
     ///                R 회복약, E 상호작용,
     ///                Tab/I 가방, ESC 일시정지
@@ -24,13 +24,13 @@ namespace SoulsHunter.Player
         [SerializeField] float gamepadSensitivity = 200f;
         [SerializeField] bool invertY = false;
 
-        [Header("Gamepad Dodge / Sprint")]
+        [Header("Dodge / Sprint (Space, 게임패드 B)")]
         [Tooltip("이 시간보다 짧게 눌렀다 떼면 구르기, 더 오래 누르면 달리기")]
         [SerializeField] float padHoldThreshold = 0.25f;
 
-        InputAction move, lookMouse, lookStick, sprintKey, dodgeKey, padDodgeSprint, lockOn, lightAttack, heavyAttack,
+        InputAction move, lookMouse, lookStick, dodgeSprint, lockOn, lightAttack, heavyAttack,
                     useItem, interact, inventory, guard, pause, special;
-        float padPressTime;
+        float dodgeSprintPressTime;
 
         /// <summary>이동 입력 (길이 0~1)</summary>
         public Vector2 Move { get; private set; }
@@ -66,9 +66,9 @@ namespace SoulsHunter.Player
             lookMouse = new InputAction("LookMouse", InputActionType.Value, "<Mouse>/delta");
             lookStick = new InputAction("LookStick", InputActionType.Value, "<Gamepad>/rightStick");
 
-            sprintKey = new InputAction("Sprint", InputActionType.Button, "<Keyboard>/leftShift");
-            dodgeKey = new InputAction("Dodge", InputActionType.Button, "<Keyboard>/space");
-            padDodgeSprint = new InputAction("PadDodgeSprint", InputActionType.Button, "<Gamepad>/buttonEast");
+            // 구르기/달리기: 한 버튼. 짧게 눌렀다 떼면 구르기, 꾹 누르고 있으면 달리기 (소울 시리즈 방식)
+            dodgeSprint = new InputAction("DodgeSprint", InputActionType.Button, "<Keyboard>/space");
+            dodgeSprint.AddBinding("<Gamepad>/buttonEast");
 
             lockOn = new InputAction("LockOn", InputActionType.Button, "<Keyboard>/q");
             lockOn.AddBinding("<Mouse>/middleButton");
@@ -120,7 +120,7 @@ namespace SoulsHunter.Player
             foreach (var a in All()) a.Dispose();
         }
 
-        InputAction[] All() => new[] { move, lookMouse, lookStick, sprintKey, dodgeKey, padDodgeSprint, lockOn, lightAttack, heavyAttack,
+        InputAction[] All() => new[] { move, lookMouse, lookStick, dodgeSprint, lockOn, lightAttack, heavyAttack,
                                        useItem, interact, inventory, guard, pause, special };
 
         void Update()
@@ -145,12 +145,13 @@ namespace SoulsHunter.Player
 
             // 게임패드 B: 짧게 누르면 구르기, 길게 누르면 달리기 (소울 시리즈 방식)
             float now = Time.unscaledTime;
-            if (padDodgeSprint.WasPressedThisFrame()) padPressTime = now;
-            bool padSprint = padDodgeSprint.IsPressed() && now - padPressTime >= padHoldThreshold;
-            bool padDodge = padDodgeSprint.WasReleasedThisFrame() && now - padPressTime < padHoldThreshold;
+            if (dodgeSprint.WasPressedThisFrame()) dodgeSprintPressTime = now;
+            float held = now - dodgeSprintPressTime;
+            bool sprint = dodgeSprint.IsPressed() && held >= padHoldThreshold;
+            bool dodge = dodgeSprint.WasReleasedThisFrame() && held < padHoldThreshold;
 
-            SprintHeld = sprintKey.IsPressed() || padSprint;
-            DodgePressed = dodgeKey.WasPressedThisFrame() || padDodge;
+            SprintHeld = sprint;
+            DodgePressed = dodge;
             LockOnPressed = lockOn.WasPressedThisFrame();
 
             // 커서가 풀린 상태의 클릭은 '커서 다시 잠그기'용이므로 공격으로 치지 않는다

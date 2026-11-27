@@ -24,7 +24,7 @@ namespace SoulsHunter.UI
         const string ControlsText =
             "<b>조작법</b>\n\n" +
             "<b>키보드 / 마우스</b>\n" +
-            "WASD 이동   ·   마우스 시점   ·   Shift 달리기   ·   Space 구르기\n" +
+            "WASD 이동   ·   마우스 시점   ·   Space 짧게 = 구르기 / 꾹 = 달리기\n" +
             "좌클릭 약공격   ·   우클릭 강공격 (대검·해머는 누르고 있으면 모으기)\n" +
             "Ctrl 가드 (누르는 순간 패링)   ·   F 무기 특수 행동 (귀인화 / 도약 / 카운터)\n" +
             "Q / 휠클릭 락온   ·   R 회복약   ·   E 상호작용   ·   Tab / I 가방   ·   ESC 메뉴\n\n" +

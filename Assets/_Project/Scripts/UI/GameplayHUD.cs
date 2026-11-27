@@ -22,13 +22,16 @@ namespace SoulsHunter.UI
         [SerializeField] PlayerInputHandler input;
         [SerializeField] PlayerWeapon weapon;
         [SerializeField] PlayerArmor armor;
+        [SerializeField] PlayerWeaponSpecial weaponSpecial;
+        [SerializeField] PlayerCombat combat;
 
         const float ToastDuration = 3.5f;
         const int MaxToasts = 5;
         static readonly Color HuntBannerColor = new(0.95f, 0.85f, 0.55f);
         static readonly Color FailBannerColor = new(0.85f, 0.3f, 0.25f);
 
-        Text flaskText, promptText, bannerText, inventoryText, questText;
+        Text flaskText, promptText, bannerText, inventoryText, questText, chargeText;
+        float chargeFlashTime = -10f;
         GameObject promptRoot, inventoryRoot;
         RectTransform toastRoot;
         Font font;
@@ -48,10 +51,13 @@ namespace SoulsHunter.UI
                 if (!input) input = player.GetComponent<PlayerInputHandler>();
                 if (!weapon) weapon = player.GetComponent<PlayerWeapon>();
                 if (!armor) armor = player.GetComponent<PlayerArmor>();
+                if (!weaponSpecial) weaponSpecial = player.GetComponent<PlayerWeaponSpecial>();
+                if (!combat) combat = player.GetComponent<PlayerCombat>();
             }
             font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
             BuildUI();
 
+            if (combat) combat.ChargeChanged += OnChargeChanged;
             if (inventory)
             {
                 inventory.ItemAdded += OnItemAdded;
@@ -137,7 +143,10 @@ namespace SoulsHunter.UI
             string status = flask ? $"회복약  {flask.Charges} / {flask.MaxCharges}" : "";
             if (armor) status = $"<size=20><color=#CCCCCC>{armor.DisplayName}</color></size>\n{status}";
             if (weapon) status = $"<size=20><color=#CCCCCC>{weapon.DisplayName}</color></size>\n{status}";
+            string special = weaponSpecial ? weaponSpecial.StatusText : "";
+            if (!string.IsNullOrEmpty(special)) status = $"<size=20>{special}</size>\n{status}";
             flaskText.text = status;
+            UpdateCharge(now);
             UpdateQuestTracker();
 
             var target = interactor ? interactor.Current : null;
@@ -177,6 +186,31 @@ namespace SoulsHunter.UI
                 inventoryRoot.SetActive(!inventoryRoot.activeSelf);
                 RefreshInventory();
             }
+        }
+
+        // ───────── 모으기 ─────────
+
+        int chargeLevel, chargeMax;
+
+        void OnChargeChanged(int level, int max)
+        {
+            chargeLevel = level;
+            if (max > 0) chargeMax = max;
+            chargeFlashTime = Time.unscaledTime;
+        }
+
+        void UpdateCharge(float now)
+        {
+            bool show = (combat && combat.IsCharging) || chargeLevel > 0;
+            if (!show) { chargeText.color = Color.clear; return; }
+
+            var sb = new StringBuilder("모으기  ");
+            for (int i = 1; i <= Mathf.Max(1, chargeMax); i++) sb.Append(i <= chargeLevel ? "◆" : "◇");
+            chargeText.text = sb.ToString();
+            // 단계가 오를 때 잠깐 하얗게 번쩍
+            float flash = Mathf.Clamp01(1f - (now - chargeFlashTime) / 0.25f);
+            chargeText.color = Color.Lerp(new Color(1f, 0.75f, 0.3f), Color.white, flash);
+            chargeText.rectTransform.localScale = Vector3.one * (1f + 0.25f * flash);
         }
 
         void OnItemAdded(ItemData item, int amount) =>
@@ -236,6 +270,11 @@ namespace SoulsHunter.UI
             flaskText = MakeText(root, "Flask", 26, TextAnchor.LowerLeft);
             Place(flaskText.rectTransform, new Vector2(0f, 0f), new Vector2(60f, 50f), new Vector2(400f, 40f));
             flaskText.color = new Color(1f, 0.75f, 0.35f);
+
+            // 모으기 단계 (가운데 조금 아래)
+            chargeText = MakeText(root, "Charge", 34, TextAnchor.MiddleCenter);
+            Place(chargeText.rectTransform, new Vector2(0.5f, 0.5f), new Vector2(0f, -140f), new Vector2(600f, 60f));
+            chargeText.color = Color.clear;
 
             // 퀘스트 진행 (오른쪽 위)
             questText = MakeText(root, "Quest", 26, TextAnchor.UpperRight);

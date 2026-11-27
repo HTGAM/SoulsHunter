@@ -87,6 +87,26 @@ namespace SoulsHunter.Player
         /// <summary>true면 회피 불가 (회복약 마시는 중 등)</summary>
         public bool DodgeBlocked { get; set; }
 
+        /// <summary>무기에 따른 이동 속도 배율 (달리기에도 적용, 달리기를 막지 않음)</summary>
+        public float WeaponSpeedMultiplier { get; set; } = 1f;
+
+        /// <summary>무기에 따른 구르기 거리 배율 (랜스는 짧은 스텝)</summary>
+        public float DodgeDistanceMultiplier { get; set; } = 1f;
+
+        public bool IsGrounded => controller && controller.isGrounded;
+
+        /// <summary>공중으로 띄운다 (도약 등). horizontal은 수평 속도(m/s).</summary>
+        public void Launch(float upVelocity, Vector3 horizontal)
+        {
+            verticalVelocity = upVelocity;
+            horizontal.y = 0f;
+            horizontalVelocity = horizontal;
+            isDodging = false;
+        }
+
+        /// <summary>위로만 튕긴다 (공중 공격이 맞았을 때 등). 수평 속도는 유지.</summary>
+        public void Bounce(float upVelocity) => verticalVelocity = Mathf.Max(verticalVelocity, upVelocity);
+
         Vector3 externalDisplacement;
         float stunnedUntil;
         float frameSpeedCap = 1f;
@@ -170,9 +190,11 @@ namespace SoulsHunter.Player
                 if (!stamina.CanUse) sprintLockedOut = true;
             }
 
-            float speed = (IsSprinting ? sprintSpeed : runSpeed * moveDir.magnitude) * speedMultiplier;
+            float speed = (IsSprinting ? sprintSpeed : runSpeed * moveDir.magnitude) * speedMultiplier * WeaponSpeedMultiplier;
             Vector3 targetVelocity = hasInput ? moveDir.normalized * speed : Vector3.zero;
-            horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, targetVelocity, acceleration * dt);
+            // 공중에서는 방향을 조금만 바꿀 수 있다 (도약 후 관성 유지)
+            float accel = controller.isGrounded ? acceleration : acceleration * 0.15f;
+            horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, targetVelocity, accel * dt);
 
             // 회전: 락온 중(달리기 제외)엔 대상을, 아니면 이동 방향을 바라본다
             Vector3 face = Vector3.zero;
@@ -186,7 +208,8 @@ namespace SoulsHunter.Player
         Vector3 UpdateLocked(float dt)
         {
             IsSprinting = false;
-            horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, Vector3.zero, acceleration * dt);
+            float accel = controller.isGrounded ? acceleration : acceleration * 0.15f;
+            horizontalVelocity = Vector3.MoveTowards(horizontalVelocity, Vector3.zero, accel * dt);
             return horizontalVelocity * dt;
         }
 
@@ -251,14 +274,14 @@ namespace SoulsHunter.Player
             if (isBackstep)
             {
                 dodgeDirection = -transform.forward;
-                dodgeDistance = backstepDistance;
+                dodgeDistance = backstepDistance * Mathf.Max(0.6f, DodgeDistanceMultiplier);
                 dodgeDuration = backstepDuration;
                 dodgeIFrames = backstepInvulnerability;
             }
             else
             {
                 dodgeDirection = moveDir.normalized;
-                dodgeDistance = rollDistance;
+                dodgeDistance = rollDistance * DodgeDistanceMultiplier;
                 dodgeDuration = rollDuration;
                 dodgeIFrames = rollInvulnerability;
                 // 락온이 아닐 땐 구르는 방향으로 즉시 몸을 돌린다

@@ -50,6 +50,7 @@ namespace SoulsHunter.Player
         PlayerInputHandler input;
         PlayerCombat combat;
         PlayerFlask flask;
+        PlayerWeapon weapon;
 
         float guardStartTime = float.NegativeInfinity;
         float lastParryTime = float.NegativeInfinity;
@@ -77,6 +78,24 @@ namespace SoulsHunter.Player
             input = GetComponent<PlayerInputHandler>();
             combat = GetComponent<PlayerCombat>();
             flask = GetComponent<PlayerFlask>();
+            weapon = GetComponent<PlayerWeapon>();
+            if (shield) shieldRestPos = shield.localPosition;
+        }
+
+        WeaponData Weapon => weapon ? weapon.Equipped : null;
+
+        /// <summary>지금 무기로 가드할 수 있는지 (쌍검·해머·조충곤은 불가)</summary>
+        public bool WeaponCanGuard => !Weapon || Weapon.canGuard;
+
+        float Reduction => Weapon ? Weapon.guardReduction : damageReduction;
+        float StaminaPerDamage => staminaPerDamage * (Weapon ? Weapon.guardStaminaMultiplier : 1f);
+        float Angle => Weapon ? Weapon.guardAngle : guardAngle;
+
+        /// <summary>가드 때 들어 올릴 방패 (무기 모델이 바뀔 때 WeaponModel이 정해준다)</summary>
+        public void SetShield(Transform t)
+        {
+            shield = t;
+            shieldBlend = 0f;
             if (shield) shieldRestPos = shield.localPosition;
         }
 
@@ -89,7 +108,7 @@ namespace SoulsHunter.Player
 
         void Update()
         {
-            bool canGuard = input && input.GuardHeld && !health.IsDead && !locomotion.IsStunned && !locomotion.IsDodging &&
+            bool canGuard = WeaponCanGuard && input && input.GuardHeld && !health.IsDead && !locomotion.IsStunned && !locomotion.IsDodging &&
                             !(combat && combat.IsAttacking) && !(flask && flask.IsDrinking);
 
             if (canGuard && !IsGuarding)
@@ -121,7 +140,7 @@ namespace SoulsHunter.Player
             // info.Direction은 공격자 → 플레이어 방향. 정면에서 온 공격만 막는다.
             Vector3 fromAttacker = -info.Direction;
             fromAttacker.y = 0f;
-            if (fromAttacker.sqrMagnitude > 0.0001f && Vector3.Angle(transform.forward, fromAttacker) > guardAngle * 0.5f)
+            if (fromAttacker.sqrMagnitude > 0.0001f && Vector3.Angle(transform.forward, fromAttacker) > Angle * 0.5f)
                 return false;
 
             if (InParryWindow)
@@ -130,11 +149,11 @@ namespace SoulsHunter.Player
                 return true; // 피해 없음
             }
 
-            float cost = Mathf.Max(minStaminaCost, info.Amount * staminaPerDamage);
+            float cost = Mathf.Max(minStaminaCost * (Weapon ? Weapon.guardStaminaMultiplier : 1f), info.Amount * StaminaPerDamage);
             if (stamina.Current >= cost)
             {
                 stamina.Drain(cost);
-                info.Amount *= 1f - damageReduction;
+                info.Amount *= 1f - Reduction;
                 info.PoiseDamage *= poiseTaken;
                 Blocked?.Invoke(info);
                 return false; // 줄어든 피해는 그대로 받는다 (넉백 포함)
@@ -143,7 +162,7 @@ namespace SoulsHunter.Player
             // 가드 브레이크: 남은 스태미나만큼만 막고 경직
             float blockedPortion = cost > 0f ? Mathf.Clamp01(stamina.Current / cost) * 0.5f : 0f;
             stamina.Drain(stamina.Current);
-            info.Amount *= 1f - damageReduction * blockedPortion;
+            info.Amount *= 1f - Reduction * blockedPortion;
             IsGuarding = false;
             locomotion.Stun(guardBreakStun);
             locomotion.Animator.TrySetTrigger(GuardBreakHash);

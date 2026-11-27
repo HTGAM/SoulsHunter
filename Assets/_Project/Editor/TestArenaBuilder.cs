@@ -29,7 +29,7 @@ namespace SoulsHunter.EditorTools
         {
             "Arena", "Bonfire", "Dummies",
             "Player", "LockOnMarker", "HUD", "Forge", "Armor Bench", "Quest Board",
-            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground",
+            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack",
         };
 
         static readonly Vector3 HubSpawn = new(0f, 0f, -4f);
@@ -75,7 +75,6 @@ namespace SoulsHunter.EditorTools
             cc.radius = 0.4f;
             Visual(PrimitiveType.Capsule, "Body", player.transform, new Vector3(0f, 1f, 0f), new Vector3(0.8f, 1f, 0.8f), playerMat);
             Visual(PrimitiveType.Cube, "Nose (정면 표시)", player.transform, new Vector3(0f, 1.5f, 0.4f), new Vector3(0.25f, 0.15f, 0.3f), enemyMat);
-            Visual(PrimitiveType.Cube, "Sword", player.transform, new Vector3(0.45f, 1.1f, 0.6f), new Vector3(0.08f, 0.08f, 1.1f), MakeMaterial(new Color(0.85f, 0.85f, 0.9f)));
             var inputHandler = player.AddComponent<PlayerInputHandler>();
             var stamina = player.AddComponent<PlayerStamina>();
             var playerHealth = player.AddComponent<Health>();
@@ -88,9 +87,7 @@ namespace SoulsHunter.EditorTools
             player.AddComponent<PlayerFlask>();
             player.AddComponent<PlayerInteractor>();
             player.AddComponent<PlayerInventory>();
-            var shield = Visual(PrimitiveType.Cube, "Shield", player.transform, new Vector3(-0.5f, 1.0f, 0.35f), new Vector3(0.08f, 0.7f, 0.55f), MakeMaterial(new Color(0.45f, 0.32f, 0.2f)));
-            var guard = player.AddComponent<PlayerGuard>();
-            SetRef(guard, "shield", shield.transform);
+            player.AddComponent<PlayerGuard>(); // 방패 모델은 무기에 따라 PlayerWeaponLoadout이 만든다
 
             // 카메라
             var cam = Camera.main;
@@ -131,6 +128,7 @@ namespace SoulsHunter.EditorTools
             SetupProgression(player);
             BuildQuestBoard(new Vector3(-4f, 0f, 3f));
             BuildDepartureGate(new Vector3(0f, 0f, 11f));
+            BuildWeaponRack(new Vector3(4f, 0f, 7f));
 
             // 훈련장 허수아비 (안전구역 왼쪽)
             var training = Create("Training Ground");
@@ -307,6 +305,28 @@ namespace SoulsHunter.EditorTools
             Visual(PrimitiveType.Cube, "Notice A", root.transform, new Vector3(-0.45f, 1.5f, -0.05f), new Vector3(0.55f, 0.7f, 0.02f), paperMat);
             Visual(PrimitiveType.Cube, "Notice B", root.transform, new Vector3(0.4f, 1.4f, -0.05f), new Vector3(0.5f, 0.6f, 0.02f), paperMat);
             root.AddComponent<QuestBoard>();
+        }
+
+        /// <summary>무기 거치대: 나무 틀에 무기 모양 6개. 상호작용하면 다음 무기를 든다.</summary>
+        static void BuildWeaponRack(Vector3 pos)
+        {
+            var root = Create("Weapon Rack");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.Euler(0f, 200f, 0f);
+
+            var woodMat = MakeMaterial(new Color(0.4f, 0.28f, 0.18f));
+            var steelMat = MakeMaterial(new Color(0.75f, 0.77f, 0.8f));
+            Primitive(PrimitiveType.Cube, "Post L", root.transform, new Vector3(-1.4f, 0.9f, 0f), new Vector3(0.15f, 1.8f, 0.15f), woodMat);
+            Primitive(PrimitiveType.Cube, "Post R", root.transform, new Vector3(1.4f, 0.9f, 0f), new Vector3(0.15f, 1.8f, 0.15f), woodMat);
+            Primitive(PrimitiveType.Cube, "Bar", root.transform, new Vector3(0f, 1.6f, 0f), new Vector3(3f, 0.12f, 0.12f), woodMat);
+            Primitive(PrimitiveType.Cube, "Base", root.transform, new Vector3(0f, 0.1f, 0f), new Vector3(3f, 0.2f, 0.5f), woodMat);
+            for (int i = 0; i < 6; i++)
+            {
+                float x = -1.1f + i * 0.44f;
+                float h = 0.9f + (i % 2) * 0.25f;
+                Visual(PrimitiveType.Cube, "Weapon", root.transform, new Vector3(x, 0.2f + h * 0.5f, 0.05f), new Vector3(0.08f, h, 0.06f), steelMat);
+            }
+            root.AddComponent<WeaponRack>();
         }
 
         /// <summary>출발 관문: 돌 아치. 퀘스트를 받으면 가운데가 빛난다.</summary>
@@ -642,7 +662,7 @@ namespace SoulsHunter.EditorTools
 
             // 무기: 피해 +15% / +15% / +20% / +25%
             var weapon = player.AddComponent<PlayerWeapon>();
-            weapon.EditorSetup("헌터의 대검", new List<UpgradableEquipment.UpgradeStep>
+            weapon.EditorSetup("무기", new List<UpgradableEquipment.UpgradeStep>
             {
                 Step(0.15f, (fur, 2), (tooth, 2)),
                 Step(0.15f, (scale, 3), (hide, 1), (tooth, 2)),
@@ -650,7 +670,11 @@ namespace SoulsHunter.EditorTools
                 Step(0.25f, (fang, 2), (spike, 2), (gem, 1)),
                 Step(0.25f, (wHorn, 1), (wScale, 4), (wCore, 1)),
             });
+            var weaponTypes = WeaponPresets.GetOrCreateAll();
+            weapon.EditorSetupWeapons(weaponTypes, weaponTypes[0]);
             EditorUtility.SetDirty(weapon);
+            player.AddComponent<PlayerWeaponSpecial>();
+            player.AddComponent<PlayerWeaponLoadout>();
 
             // 방어구: 받는 피해 -8% / -8% / -10% / -12%
             var armor = player.AddComponent<PlayerArmor>();

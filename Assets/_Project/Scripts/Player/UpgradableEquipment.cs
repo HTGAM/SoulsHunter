@@ -38,7 +38,7 @@ namespace SoulsHunter.Player
         public int MaxLevel => upgrades.Count;
         public bool IsMaxed => Level >= MaxLevel;
         public UpgradeStep NextStep => IsMaxed ? null : upgrades[Level];
-        public string DisplayName => Level > 0 ? $"{equipmentName} +{Level}" : equipmentName;
+        public virtual string DisplayName => Level > 0 ? $"{equipmentName} +{Level}" : equipmentName;
 
         /// <summary>지금까지 올린 단계의 bonus 합</summary>
         public float TotalBonus

@@ -11,7 +11,7 @@ namespace SoulsHunter.Save
 {
     /// <summary>
     /// 진행 상황 저장/불러오기 (JSON, Application.persistentDataPath/save.json).
-    /// 저장하는 것: 가방, 무기·방어구 강화 단계, 클리어한 퀘스트와 최고 기록(시간·랭크).
+    /// 저장하는 것: 가방, 든 무기 종류, 무기·방어구 강화 단계, 클리어한 퀘스트와 최고 기록(시간·랭크).
     /// - 시작할 때 불러온다 (항상 안전구역에서 시작).
     /// - 장비 강화·퀘스트 클리어 때 바로 저장. 아이템을 얻으면 잠시 뒤 자동 저장. 게임을 끌 때도 저장.
     /// 플레이어 오브젝트에 붙인다.
@@ -35,6 +35,7 @@ namespace SoulsHunter.Save
             public List<ItemEntry> items = new();
             public int weaponLevel;
             public int armorLevel;
+            public string equippedWeapon = "";
             public List<string> clearedQuests = new();
             public List<QuestRecord> questRecords = new();
         }
@@ -102,7 +103,11 @@ namespace SoulsHunter.Save
             if (inventory)
                 foreach (var item in inventory.Items)
                     data.items.Add(new ItemEntry { id = item.name, count = inventory.Count(item) });
-            if (weapon) data.weaponLevel = weapon.Level;
+            if (weapon)
+            {
+                data.weaponLevel = weapon.Level;
+                if (weapon.Equipped) data.equippedWeapon = weapon.Equipped.name;
+            }
             if (armor) data.armorLevel = armor.Level;
             if (HuntManager.Instance)
             {
@@ -154,7 +159,11 @@ namespace SoulsHunter.Save
                     inventory.LoadContents(contents);
                 }
 
-                if (weapon) weapon.SetLevel(data.weaponLevel);
+                if (weapon)
+                {
+                    weapon.SetLevel(data.weaponLevel);
+                    if (!string.IsNullOrEmpty(data.equippedWeapon)) weapon.EquipByName(data.equippedWeapon);
+                }
                 if (armor) armor.SetLevel(data.armorLevel);
 
                 if (HuntManager.Instance)

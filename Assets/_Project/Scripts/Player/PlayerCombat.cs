@@ -40,7 +40,22 @@ namespace SoulsHunter.Player
         [Header("Feel")]
         public float hitStop = 0.06f;
 
+        [Header("Charge (버튼을 누르고 있으면 예고 끝에서 멈춰 힘을 모은다)")]
+        [Tooltip("0이면 모으기 없음. 단계마다 피해·강인 피해가 늘어난다")]
+        public int chargeLevels = 0;
+        public float chargeTimePerLevel = 0.5f;
+        [Tooltip("단계당 피해 증가 (0.5 = 단계마다 +50%)")]
+        public float chargeDamagePerLevel = 0.5f;
+        public float chargePoisePerLevel = 0.5f;
+
+        [Header("Aerial")]
+        [Tooltip("공중 공격이 맞으면 이 속도로 다시 튀어오른다 (0이면 없음)")]
+        public float bounceOnHit = 0f;
+
         public float Total => windup + active + recovery;
+
+        /// <summary>복사본 (에디터에서 프리셋을 만들 때)</summary>
+        public AttackStep Clone() => (AttackStep)MemberwiseClone();
 
         public AttackStep() { }
 
@@ -56,15 +71,17 @@ namespace SoulsHunter.Player
     }
 
     /// <summary>
-    /// 약공격/강공격 콤보. 공격 중 다음 버튼을 미리 눌러두면 후딜 시작 시 이어진다.
-    /// 후딜 후반에는 구르기나 이동으로 캔슬할 수 있다.
+    /// 약공격/강공격 콤보. 동작은 장착한 무기(WeaponData)를 따른다.
+    /// 공격 중 다음 버튼을 미리 눌러두면 후딜 시작 시 이어진다. 후딜 후반에는 구르기나 이동으로 캔슬할 수 있다.
+    /// 모으기 공격(대검·해머)은 버튼을 누르고 있으면 예고 끝에서 멈춰 단계별로 힘을 모은다.
     /// </summary>
     [DefaultExecutionOrder(-50)] // PlayerLocomotion보다 먼저 ActionLocked를 정한다
     [RequireComponent(typeof(PlayerLocomotion), typeof(PlayerInputHandler), typeof(PlayerStamina))]
     public class PlayerCombat : MonoBehaviour
     {
-        public enum AttackType { Light, Heavy }
+        public enum AttackType { Light, Heavy, Special }
 
+        [Tooltip("무기(WeaponData)가 없을 때 쓰는 기본 동작")]
         [SerializeField] List<AttackStep> lightCombo = new()
         {
             new("Light 1", 20f, 10f, 14f, 0.22f, 0.12f, 0.35f, 0.50f, 0.6f, new(0f, 1f, 1.1f), new(1.6f, 1.2f, 1.6f), 0.05f),
@@ -82,6 +99,8 @@ namespace SoulsHunter.Player
         [SerializeField] float comboResetTime = 0.4f;
         [Tooltip("공격 버튼 선입력 유지 시간")]
         [SerializeField] float inputBuffer = 0.3f;
+        [Tooltip("모으기 최대 단계에서 이 시간이 지나면 저절로 내려친다")]
+        [SerializeField] float maxChargeHold = 0.4f;
         [SerializeField] LayerMask hitMask = ~0;
 
         PlayerLocomotion locomotion;
@@ -98,6 +117,11 @@ namespace SoulsHunter.Player
         float lastAttackEndTime = float.NegativeInfinity;
         float lungeProgress;
 
+        // 모으기
+        bool charging, chargeDone;
+        float chargeTime;
+        int chargeLevel;
+
         AttackType? bufferedAttack;
         float bufferedUntil;
 
@@ -108,15 +132,30 @@ namespace SoulsHunter.Player
         public bool IsAttacking => current != null;
         public AttackStep CurrentAttack => current;
         public bool InActiveFrames => IsAttacking && timer >= current.windup && timer < current.windup + current.active;
+        public bool IsCharging => charging;
+        public int ChargeLevel => chargeLevel;
+
+        /// <summary>특수 행동(귀인화 등)이 바꾸는 피해 배율</summary>
+        public float ExternalDamageMultiplier { get; set; } = 1f;
+        /// <summary>특수 행동(귀인화 등)이 바꾸는 공격 속도 배율</summary>
+        public float AttackSpeedMultiplier { get; set; } = 1f;
+
+        WeaponData Weapon => weapon ? weapon.Equipped : null;
+        List<AttackStep> LightCombo => Weapon && Weapon.lightCombo.Count > 0 ? Weapon.lightCombo : lightCombo;
+        List<AttackStep> HeavyCombo => Weapon && Weapon.heavyCombo.Count > 0 ? Weapon.heavyCombo : heavyCombo;
 
         /// <summary>공격 시작 (공격 종류, 콤보 단계 0~)</summary>
         public event Action<AttackType, int> AttackStarted;
         /// <summary>공격이 무언가에 맞았을 때</summary>
         public event Action<Hurtbox, DamageInfo> HitLanded;
+        /// <summary>모으기 단계가 올라갔을 때 (단계, 최대 단계). 0이면 모으기 끝.</summary>
+        public event Action<int, int> ChargeChanged;
 
         static readonly int LightAttackHash = Animator.StringToHash("LightAttack");
         static readonly int HeavyAttackHash = Animator.StringToHash("HeavyAttack");
+        static readonly int SpecialAttackHash = Animator.StringToHash("SpecialAttack");
         static readonly int ComboIndexHash = Animator.StringToHash("ComboIndex");
+        static readonly int ChargeHash = Animator.StringToHash("Charging");
 
         void Awake()
         {
@@ -129,6 +168,7 @@ namespace SoulsHunter.Player
             if (ownHealth) ownHealth.InvulnerabilityCheck = () => locomotion.IsInvulnerable;
 
             locomotion.Dodged += _ => EndAttack(); // 구르기는 공격을 캔슬한다
+            if (weapon) weapon.WeaponChanged += _ => { EndAttack(); comboIndex = -1; };
         }
 
         void OnDisable()
@@ -152,14 +192,21 @@ namespace SoulsHunter.Player
                 return;
             }
 
-            if (IsAttacking) TickAttack(Time.deltaTime);
+            if (IsAttacking) TickAttack(Time.deltaTime * AttackSpeedMultiplier);
 
             if (!IsAttacking && bufferedAttack.HasValue && !locomotion.IsDodging && !(flask && flask.IsDrinking))
             {
                 var type = bufferedAttack.Value;
                 bufferedAttack = null;
-                bool continues = type == currentType && Time.time - lastAttackEndTime <= comboResetTime;
-                StartAttack(type, continues ? comboIndex + 1 : 0);
+
+                // 조충곤: 공중에서 약공격 = 공중 베기
+                if (type == AttackType.Light && !locomotion.IsGrounded && Weapon && Weapon.special == WeaponData.Special.Vault)
+                    StartSpecialAttack(Weapon.specialAttack);
+                else
+                {
+                    bool continues = type == currentType && Time.time - lastAttackEndTime <= comboResetTime;
+                    StartAttack(type, continues ? comboIndex + 1 : 0);
+                }
             }
 
             locomotion.ActionLocked = IsAttacking && timer < current.cancelableAfter;
@@ -173,16 +220,34 @@ namespace SoulsHunter.Player
 
         void StartAttack(AttackType type, int index)
         {
-            var combo = type == AttackType.Light ? lightCombo : heavyCombo;
+            var combo = type == AttackType.Light ? LightCombo : HeavyCombo;
             if (combo.Count == 0) return;
             if (index >= combo.Count) index = 0;
             if (!stamina.TryConsume(combo[index].staminaCost)) return;
+            Begin(combo[index], type, index);
+        }
 
-            current = combo[index];
+        /// <summary>
+        /// 콤보와 상관없는 공격을 바로 시작한다 (랜스 반격, 조충곤 공중 베기 등).
+        /// 스태미나는 부르는 쪽에서 처리한다.
+        /// </summary>
+        public void StartSpecialAttack(AttackStep step)
+        {
+            if (step == null || step.Total <= 0f) return;
+            EndAttack();
+            Begin(step, AttackType.Special, 0);
+        }
+
+        void Begin(AttackStep step, AttackType type, int index)
+        {
+            current = step;
             currentType = type;
             comboIndex = index;
             timer = 0f;
             lungeProgress = 0f;
+            charging = chargeDone = false;
+            chargeTime = 0f;
+            chargeLevel = 0;
             hitThisSwing.Clear();
 
             // 시작할 때 락온 대상/입력 방향으로 바로 몸을 돌린다
@@ -192,16 +257,30 @@ namespace SoulsHunter.Player
             if (anim)
             {
                 anim.TrySetInt(ComboIndexHash, index);
-                anim.TrySetTrigger(type == AttackType.Light ? LightAttackHash : HeavyAttackHash);
+                anim.TrySetTrigger(type switch
+                {
+                    AttackType.Light => LightAttackHash,
+                    AttackType.Heavy => HeavyAttackHash,
+                    _ => SpecialAttackHash,
+                });
             }
             AttackStarted?.Invoke(type, index);
         }
 
         void TickAttack(float dt)
         {
+            var a = current;
+
+            // 모으기: 예고 끝에서 버튼을 누르고 있으면 멈춰서 힘을 모은다
+            if (a.chargeLevels > 0 && !chargeDone && timer + dt >= a.windup)
+            {
+                bool held = currentType == AttackType.Heavy ? input.HeavyAttackHeld : input.LightAttackHeld;
+                if (held && TickCharge(a, dt)) return;
+                EndCharge();
+            }
+
             float prev = timer;
             timer += dt;
-            var a = current;
 
             // 선딜 중엔 대상 쪽으로 조금씩 돌 수 있다 (소울류 '트래킹')
             if (timer < a.windup) locomotion.FaceTowards(locomotion.GetIntendedFacing(), a.trackingSpeed * dt);
@@ -220,7 +299,7 @@ namespace SoulsHunter.Player
 
             // 콤보 선입력이 있으면 후딜 시작 지점부터 바로 다음 공격으로
             bool inRecovery = timer >= a.windup + a.active;
-            if (inRecovery && bufferedAttack.HasValue)
+            if (inRecovery && bufferedAttack.HasValue && currentType != AttackType.Special)
             {
                 var type = bufferedAttack.Value;
                 bufferedAttack = null;
@@ -236,6 +315,37 @@ namespace SoulsHunter.Player
             }
 
             if (timer >= a.Total) EndAttack();
+        }
+
+        /// <returns>계속 모으는 중이면 true (이번 프레임 공격 진행을 멈춘다)</returns>
+        bool TickCharge(AttackStep a, float dt)
+        {
+            if (!charging)
+            {
+                charging = true;
+                locomotion.Animator.TrySetBool(ChargeHash, true);
+            }
+            chargeTime += dt;
+            locomotion.FaceTowards(locomotion.GetIntendedFacing(), a.trackingSpeed * dt);
+
+            int level = Mathf.Min(a.chargeLevels, Mathf.FloorToInt(chargeTime / Mathf.Max(0.05f, a.chargeTimePerLevel)));
+            if (level != chargeLevel)
+            {
+                chargeLevel = level;
+                ChargeChanged?.Invoke(chargeLevel, a.chargeLevels);
+            }
+            // 최대 단계에서 너무 오래 들고 있으면 저절로 내려친다
+            return chargeTime < a.chargeLevels * a.chargeTimePerLevel + maxChargeHold;
+        }
+
+        void EndCharge()
+        {
+            chargeDone = true;
+            if (charging)
+            {
+                charging = false;
+                locomotion.Animator.TrySetBool(ChargeHash, false);
+            }
         }
 
         void DoHitDetection()
@@ -258,14 +368,18 @@ namespace SoulsHunter.Player
             }
             if (best == null) return;
 
+            float chargeMult = 1f + chargeLevel * a.chargeDamagePerLevel;
+            float poiseMult = 1f + chargeLevel * a.chargePoisePerLevel;
+            float damage = a.damage * (weapon ? weapon.DamageMultiplier : 1f) * ExternalDamageMultiplier * chargeMult;
+
             bool anyHit = false;
             foreach (var kv in best)
             {
                 hitThisSwing.Add(kv.Key);
                 var info = new DamageInfo
                 {
-                    Amount = a.damage * (weapon ? weapon.DamageMultiplier : 1f),
-                    PoiseDamage = a.poiseDamage,
+                    Amount = damage,
+                    PoiseDamage = a.poiseDamage * poiseMult,
                     Point = kv.Value.point,
                     Direction = transform.forward,
                     Source = gameObject,
@@ -278,12 +392,18 @@ namespace SoulsHunter.Player
                     HitLanded?.Invoke(kv.Value.box, info);
                 }
             }
-            if (anyHit && a.hitStop > 0f) HitStop(a.hitStop);
+            if (!anyHit) return;
+            if (a.bounceOnHit > 0f) locomotion.Bounce(a.bounceOnHit);
+            float stop = a.hitStop * (1f + chargeLevel * 0.3f);
+            if (stop > 0f) HitStop(stop);
         }
 
         void EndAttack()
         {
             if (current == null) return;
+            if (charging) EndCharge();
+            if (chargeLevel > 0) ChargeChanged?.Invoke(0, 0);
+            chargeLevel = 0;
             current = null;
             lastAttackEndTime = Time.time;
             locomotion.ActionLocked = false;

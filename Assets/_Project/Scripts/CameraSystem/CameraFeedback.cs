@@ -38,7 +38,11 @@ namespace SoulsHunter.CameraSystem
             guard = player.GetComponent<PlayerGuard>();
 
             if (playerHealth) playerHealth.Damaged += OnPlayerDamaged;
-            if (combat) combat.HitLanded += OnHitLanded;
+            if (combat)
+            {
+                combat.HitLanded += OnHitLanded;
+                combat.ChargeChanged += (level, _) => { if (level > 0) cam.Shake(0.03f + 0.03f * level, 0.12f); };
+            }
             if (guard)
             {
                 guard.Blocked += _ => cam.Shake(blockShake, 0.15f);

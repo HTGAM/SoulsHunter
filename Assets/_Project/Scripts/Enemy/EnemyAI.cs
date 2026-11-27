@@ -85,6 +85,8 @@ namespace SoulsHunter.Enemy
         [Header("Ranged (투사체 / 장판)")]
         [Tooltip("투사체와 장판 폭발 머티리얼. 비워두면 주황색 발광 머티리얼을 만든다")]
         [SerializeField] Material projectileMaterial;
+        [Tooltip("투사체가 나가는 위치 (모델의 입 뼈 등). 비워두면 공격별 Muzzle Offset을 쓴다")]
+        [SerializeField] Transform muzzle;
         [SerializeField] Color telegraphAreaColor = new(1f, 0.05f, 0.02f, 0.22f);
         [SerializeField] Color telegraphFillColor = new(1f, 0.1f, 0.02f, 0.45f);
         [SerializeField] Color telegraphEdgeColor = new(1f, 0.08f, 0.04f, 0.95f);
@@ -115,6 +117,13 @@ namespace SoulsHunter.Enemy
         public State CurrentState => state;
         public EnemyAttack CurrentAttack => current;
         public bool IsEnraged => enraged;
+        public IReadOnlyList<EnemyAttack> Attacks => attacks;
+        /// <summary>공격 동작 배속 (분노 중이면 빨라짐)</summary>
+        public float AttackTimeScale => enraged ? enrageAttackSpeed : 1f;
+        /// <summary>지금 추적 이동 속도</summary>
+        public float MoveSpeed => BaseMoveSpeed;
+        /// <summary>공격을 시작할 때 (애니메이션용)</summary>
+        public event System.Action<EnemyAttack> AttackStarted;
 
         /// <summary>분노 페이즈에 들어갈 때</summary>
         public event System.Action Enraged;
@@ -291,6 +300,7 @@ namespace SoulsHunter.Enemy
             agent.isStopped = true;
             agent.ResetPath();
             agent.velocity = Vector3.zero; // 미끄러지지 않고 그 자리에서 바로 멈춤
+            AttackStarted?.Invoke(attack);
         }
 
         /// <summary>이 공격에서 실제로 전진할 거리</summary>
@@ -342,7 +352,7 @@ namespace SoulsHunter.Enemy
 
             if (a.kind == EnemyAttack.Kind.Projectile)
             {
-                Vector3 origin = Feet + transform.rotation * a.muzzleOffset;
+                Vector3 origin = muzzle ? muzzle.position : Feet + transform.rotation * a.muzzleOffset;
                 Vector3 aim = target.position + Vector3.up * 1f - origin;
                 for (int i = 0; i < count; i++)
                 {
@@ -580,6 +590,13 @@ namespace SoulsHunter.Enemy
             aggroRange = aggro;
             staggerDuration = staggerTime;
             enrageThreshold = enrageAt;
+        }
+
+        /// <summary>모델을 입힐 때: 투사체 발사 위치를 뼈로 바꾸고, 도형용 눈(예고 표시)은 뗀다</summary>
+        public void EditorSetModel(Transform muzzleBone)
+        {
+            muzzle = muzzleBone;
+            telegraphRenderers = new Renderer[0];
         }
 #endif
 

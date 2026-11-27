@@ -11,6 +11,8 @@ namespace SoulsHunter.Combat
     public class TrainingDummy : MonoBehaviour
     {
         [SerializeField] float respawnTime = 3f;
+        [Tooltip("쓰러진 뒤 모습을 감추기까지 기다리는 시간 (죽는 애니메이션을 보여줄 시간)")]
+        [SerializeField] float hideDelay = 0f;
         [SerializeField] Color hitColor = Color.white;
         [SerializeField] Color staggerColor = new(1f, 0.85f, 0.2f);
         [SerializeField] Color brokenPartColor = new(0.3f, 0.3f, 0.3f);
@@ -88,10 +90,20 @@ namespace SoulsHunter.Combat
             r.SetPropertyBlock(block);
         }
 
+#if UNITY_EDITOR
+        public void EditorSetHideDelay(float seconds) => hideDelay = seconds;
+#endif
+
         IEnumerator DieAndRespawn()
         {
             Debug.Log($"[{health.DisplayName}] 쓰러짐");
             if (lockOn) lockOn.CanBeTargeted = false;
+            if (hideDelay > 0f)
+            {
+                // 판정은 바로 끄고, 쓰러지는 모습을 보여준 뒤 감춘다
+                foreach (var c in colliders) c.enabled = false;
+                yield return new WaitForSeconds(hideDelay);
+            }
             SetVisible(false);
             yield return new WaitForSeconds(respawnTime);
             ResetAll();

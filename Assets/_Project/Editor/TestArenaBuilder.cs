@@ -136,6 +136,8 @@ namespace SoulsHunter.EditorTools
 
             // 퀘스트와 투기장 몬스터
             BuildHuntContent(arenaSpawn, enemyMat, weakMat);
+            // 에셋스토어 몬스터 모델이 있으면 도형 대신 입힌다
+            MonsterModelSetup.ApplyToScene(out _);
 
             Selection.activeGameObject = player;
             Undo.CollapseUndoOperations(group);

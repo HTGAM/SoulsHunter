@@ -1,0 +1,50 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce83f3fcb420b5b478e29f3d3329c431, type: 3}
+  m_Name: RavagerAnimations
+  m_EditorClassIdentifier: 
+  idle: {fileID: 1827226128182048838, guid: 4669da1f8bb705f4981a504afc6db73d, type: 3}
+  walk: {fileID: 1827226128182048838, guid: 15f0f7c5c4f614e4f9a15a4543d0e94e, type: 3}
+  run: {fileID: 1827226128182048838, guid: e220be4231865374fa9acb1f67324e59, type: 3}
+  hit: {fileID: 1827226128182048838, guid: 09d9c3834ddb7764a9fc9a8bff2e3208, type: 3}
+  stagger: {fileID: 1827226128182048838, guid: 5a5ada102496c01419601769365d759c, type: 3}
+  death: {fileID: 1827226128182048838, guid: 0447182bd66f5ca4fb61d2d2e771bb56, type: 3}
+  roar: {fileID: 0}
+  attacks:
+  - attack: Swipe
+    clip: {fileID: 1827226128182048838, guid: 86c849c123e53e44ca918624be9a421f, type: 3}
+    hitPoint: 0.53333336
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Slam
+    clip: {fileID: 1827226128182048838, guid: 267fdc1a4e2e3da4cb55529bfe46a45f, type: 3}
+    hitPoint: 0.48333332
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Tail Spin
+    clip: {fileID: 1827226128182048838, guid: 00ae9eeecc3b6c2428a6e6e8e4a3c10d, type: 3}
+    hitPoint: 0.15
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Quake
+    clip: {fileID: 1827226128182048838, guid: 267fdc1a4e2e3da4cb55529bfe46a45f, type: 3}
+    hitPoint: 0.48333332
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Charge
+    clip: {fileID: 0}
+    hitPoint: 0.5
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  flinchOnHit: 0
+  walkReferenceSpeed: 0
+  runReferenceSpeed: 0

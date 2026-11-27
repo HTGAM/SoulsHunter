@@ -1,0 +1,55 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce83f3fcb420b5b478e29f3d3329c431, type: 3}
+  m_Name: CinderWyrmAnimations
+  m_EditorClassIdentifier: 
+  idle: {fileID: 7400000, guid: 53822ae0b4a40a24b97e0cf0388e4248, type: 3}
+  walk: {fileID: 7400000, guid: 555c2f8b240202a4c8f3c3f412587e5a, type: 3}
+  run: {fileID: 7400000, guid: 93048e03d4dc597468fce555d02e9274, type: 3}
+  hit: {fileID: 7400000, guid: 34cbf41484d0da24e9a24545c9d5a332, type: 3}
+  stagger: {fileID: 7400000, guid: 34cbf41484d0da24e9a24545c9d5a332, type: 3}
+  death: {fileID: 7400000, guid: 6f83b9d81f8c7854baeca6ff691bb0c1, type: 3}
+  roar: {fileID: 7400000, guid: 8b0b248c4105fd841aad612f61769ae9, type: 3}
+  attacks:
+  - attack: Tail Whip
+    clip: {fileID: 7400000, guid: 1e32448c0eb5bdb45b3a576fb8011df0, type: 3}
+    hitPoint: 0.6
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Fireball
+    clip: {fileID: 7400000, guid: 6e4f9ef5485ccb04299f52ceae24d120, type: 3}
+    hitPoint: 0.53333336
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Triple Fire
+    clip: {fileID: 7400000, guid: 6e4f9ef5485ccb04299f52ceae24d120, type: 3}
+    hitPoint: 0.53333336
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Inferno
+    clip: {fileID: 7400000, guid: 6e4f9ef5485ccb04299f52ceae24d120, type: 3}
+    hitPoint: 0.53333336
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Meteor Rain
+    clip: {fileID: 7400000, guid: 8b0b248c4105fd841aad612f61769ae9, type: 3}
+    hitPoint: 0.9
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Firestorm
+    clip: {fileID: 7400000, guid: 8b0b248c4105fd841aad612f61769ae9, type: 3}
+    hitPoint: 0.9
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  flinchOnHit: 0
+  walkReferenceSpeed: 0
+  runReferenceSpeed: 0

@@ -1,0 +1,35 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: ce83f3fcb420b5b478e29f3d3329c431, type: 3}
+  m_Name: AshenHoundAnimations
+  m_EditorClassIdentifier: 
+  idle: {fileID: 7400000, guid: 89709d635456b1242ab79a25b48ee2d8, type: 3}
+  walk: {fileID: 7400000, guid: 1021c3a1a114cd149aa3d292fe946e87, type: 3}
+  run: {fileID: 7400000, guid: d1b2a85e71b56e548bda97f53cb9ff45, type: 3}
+  hit: {fileID: 7400000, guid: ed10b883a33b6574188ad7570f7ab315, type: 3}
+  stagger: {fileID: 7400000, guid: ed10b883a33b6574188ad7570f7ab315, type: 3}
+  death: {fileID: 7400000, guid: abecad1478c146b468857b08761602b7, type: 3}
+  roar: {fileID: 7400000, guid: 996d5d2cd219c7e42abdb6c02409548c, type: 3}
+  attacks:
+  - attack: Bite
+    clip: {fileID: 7400000, guid: 2ae66ac32e1086d4ca688205b6fad99e, type: 3}
+    hitPoint: 0.45
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  - attack: Pounce
+    clip: {fileID: 7400000, guid: 9c90dafe5a2310c40b7102fbcc05f67b, type: 3}
+    hitPoint: 0.3
+    minSpeed: 0.7
+    maxSpeed: 1.5
+  flinchOnHit: 1
+  walkReferenceSpeed: 0
+  runReferenceSpeed: 0

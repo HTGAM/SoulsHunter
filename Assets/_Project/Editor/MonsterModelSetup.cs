@@ -441,8 +441,11 @@ namespace SoulsHunter.EditorTools
             var b = LocalBounds(root, model);
             float current = Mathf.Max(b.size.y, b.size.z);
             if (current > 0.001f) model.transform.localScale = Vector3.one * (p.size / current);
-            b = LocalBounds(root, model);
-            model.transform.localPosition += new Vector3(0f, -b.min.y, 0f);
+            // 발 높이: 대기 동작을 실제로 입혀서 가장 낮은 정점을 바닥에 맞춘다
+            // (기본 자세와 대기 자세의 다리 높이가 달라 떠 보이는 것 방지)
+            float lowest = LowestPointInPose(root, model, set.idle ? set.idle : set.walk);
+            if (float.IsInfinity(lowest)) lowest = LocalBounds(root, model).min.y;
+            model.transform.localPosition += new Vector3(0f, -lowest, 0f);
             b = LocalBounds(root, model);
 
             // 부위 판정을 뼈에 붙인다
@@ -596,6 +599,47 @@ namespace SoulsHunter.EditorTools
             int d = 0;
             while (t.parent) { d++; t = t.parent; }
             return d;
+        }
+
+        /// <summary>
+        /// 클립의 첫 프레임 자세에서 메시의 가장 낮은 높이 (루트 기준).
+        /// 메시를 그 자세로 구워서 정점을 직접 본다. 실패하면 +무한대.
+        /// </summary>
+        static float LowestPointInPose(Transform root, GameObject model, AnimationClip clip)
+        {
+            var skins = model.GetComponentsInChildren<SkinnedMeshRenderer>();
+            if (skins.Length == 0) return float.PositiveInfinity;
+
+            bool started = !AnimationMode.InAnimationMode();
+            if (started) AnimationMode.StartAnimationMode();
+            var baked = new Mesh();
+            float lowest = float.PositiveInfinity;
+            try
+            {
+                if (clip)
+                {
+                    AnimationMode.BeginSampling();
+                    AnimationMode.SampleAnimationClip(model, clip, 0f);
+                    AnimationMode.EndSampling();
+                }
+                var vertices = new List<Vector3>();
+                foreach (var skin in skins)
+                {
+                    if (!skin.sharedMesh) continue;
+                    skin.BakeMesh(baked, true);
+                    baked.GetVertices(vertices);
+                    var t = skin.transform;
+                    var toWorld = Matrix4x4.TRS(t.position, t.rotation, Vector3.one);
+                    foreach (var v in vertices)
+                        lowest = Mathf.Min(lowest, root.InverseTransformPoint(toWorld.MultiplyPoint3x4(v)).y);
+                }
+            }
+            finally
+            {
+                if (started) AnimationMode.StopAnimationMode(); // 자세를 원래대로
+                Object.DestroyImmediate(baked);
+            }
+            return lowest;
         }
 
         /// <summary>모델의 보이는 범위 (루트 기준 좌표)</summary>

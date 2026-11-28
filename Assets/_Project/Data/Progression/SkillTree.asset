@@ -1,0 +1,567 @@
+%YAML 1.1
+%TAG !u! tag:unity3d.com,2011:
+--- !u!114 &11400000
+MonoBehaviour:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 0}
+  m_Enabled: 1
+  m_EditorHideFlags: 0
+  m_Script: {fileID: 11500000, guid: 3d39d433ffef57a468794c1307894dc8, type: 3}
+  m_Name: SkillTree
+  m_EditorClassIdentifier: 
+  baseCost: 100
+  costGrowth: 1.1
+  nodes:
+  - id: root
+    title: "\uD63C\uC758 \uADFC\uC6D0"
+    glyph: "\u9B42"
+    branch: 0
+    position: {x: 0, y: 0}
+    keystone: 0
+    effects: []
+    links: []
+    rareCost: {fileID: 0}
+    rareAmount: 1
+  - id: off_1
+    title: "\uB0A0 \uC120 \uC758\uC9C0"
+    glyph: "\uACF5"
+    branch: 1
+    position: {x: 1, y: 0}
+    keystone: 0
+    effects:
+    - stat: 0
+      value: 0.04
+    links:
+    - root
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: off_2
+    title: "\uC0AC\uB0E5\uAFBC\uC758 \uD314"
+    glyph: "\uACF5"
+    branch: 1
+    position: {x: 2, y: 0}
+    keystone: 0
+    effects:
+    - stat: 0
+      value: 0.04
+    links:
+    - off_1
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: off_3u
+    title: "\uAE09\uC18C \uCC0C\uB974\uAE30"
+    glyph: "\uC57D"
+    branch: 1
+    position: {x: 3, y: -1}
+    keystone: 0
+    effects:
+    - stat: 1
+      value: 0.08
+    links:
+    - off_2
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: off_4u
+    title: "\uC57D\uC810 \uB178\uB9AC\uAE30"
+    glyph: "\uC57D"
+    branch: 1
+    position: {x: 4, y: -1}
+    keystone: 0
+    effects:
+    - stat: 1
+      value: 0.08
+    links:
+    - off_3u
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: off_K1
+    title: "\uC57D\uC810 \uAC04\uD30C"
+    glyph: "\uAC04"
+    branch: 1
+    position: {x: 5, y: -1}
+    keystone: 1
+    effects:
+    - stat: 1
+      value: 0.2
+    - stat: 0
+      value: 0.05
+    links:
+    - off_4u
+    rareCost: {fileID: 11400000, guid: b73629710e1e79844ad02d0374356ab1, type: 2}
+    rareAmount: 1
+  - id: off_3l
+    title: "\uBD80\uC218\uB294 \uC77C\uACA9"
+    glyph: "\uD30C"
+    branch: 1
+    position: {x: 3, y: 1}
+    keystone: 0
+    effects:
+    - stat: 2
+      value: 0.15
+    links:
+    - off_2
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: off_4l
+    title: "\uBF08 \uAC00\uB974\uAE30"
+    glyph: "\uD30C"
+    branch: 1
+    position: {x: 4, y: 1}
+    keystone: 0
+    effects:
+    - stat: 2
+      value: 0.15
+    links:
+    - off_3l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: off_5l
+    title: "\uB2E8\uB828\uB41C \uC190\uBAA9"
+    glyph: "\uACF5"
+    branch: 1
+    position: {x: 5, y: 1}
+    keystone: 0
+    effects:
+    - stat: 0
+      value: 0.05
+    links:
+    - off_4l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: off_6
+    title: "\uD3EC\uC2DD\uC758 \uAE30\uC138"
+    glyph: "\uACF5"
+    branch: 1
+    position: {x: 6, y: 0}
+    keystone: 0
+    effects:
+    - stat: 0
+      value: 0.05
+    links:
+    - off_K1
+    - off_5l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: off_K2
+    title: "\uD3EC\uC2DD\uC790\uC758 \uC774\uBE68"
+    glyph: "\uD3EC"
+    branch: 1
+    position: {x: 7, y: 0}
+    keystone: 1
+    effects:
+    - stat: 0
+      value: 0.15
+    - stat: 3
+      value: 0.1
+    links:
+    - off_6
+    rareCost: {fileID: 11400000, guid: b73629710e1e79844ad02d0374356ab1, type: 2}
+    rareAmount: 2
+  - id: def_1
+    title: "\uB2E8\uB2E8\uD55C \uBAB8"
+    glyph: "\uCCB4"
+    branch: 2
+    position: {x: -1, y: 0}
+    keystone: 0
+    effects:
+    - stat: 4
+      value: 15
+    links:
+    - root
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: def_2
+    title: "\uB450\uAEBC\uC6B4 \uAC00\uC8FD"
+    glyph: "\uBC29"
+    branch: 2
+    position: {x: -2, y: 0}
+    keystone: 0
+    effects:
+    - stat: 3
+      value: -0.04
+    links:
+    - def_1
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: def_3u
+    title: "\uBC84\uD2F0\uB294 \uD314"
+    glyph: "\uAC00"
+    branch: 2
+    position: {x: -3, y: -1}
+    keystone: 0
+    effects:
+    - stat: 5
+      value: 0.1
+    links:
+    - def_2
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: def_4u
+    title: "\uBC29\uD328 \uC219\uB828"
+    glyph: "\uAC00"
+    branch: 2
+    position: {x: -4, y: -1}
+    keystone: 0
+    effects:
+    - stat: 5
+      value: 0.1
+    links:
+    - def_3u
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: def_K1
+    title: "\uCCA0\uBCBD"
+    glyph: "\uBCBD"
+    branch: 2
+    position: {x: -5, y: -1}
+    keystone: 1
+    effects:
+    - stat: 5
+      value: 0.2
+    - stat: 3
+      value: -0.05
+    links:
+    - def_4u
+    rareCost: {fileID: 11400000, guid: b73629710e1e79844ad02d0374356ab1, type: 2}
+    rareAmount: 1
+  - id: def_3l
+    title: "\uAC15\uC778\uD55C \uC2EC\uC7A5"
+    glyph: "\uCCB4"
+    branch: 2
+    position: {x: -3, y: 1}
+    keystone: 0
+    effects:
+    - stat: 4
+      value: 20
+    links:
+    - def_2
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: def_4l
+    title: "\uAD73\uC13C \uBF08\uB300"
+    glyph: "\uCCB4"
+    branch: 2
+    position: {x: -4, y: 1}
+    keystone: 0
+    effects:
+    - stat: 4
+      value: 20
+    links:
+    - def_3l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: def_5l
+    title: "\uBE44\uB298 \uAC19\uC740 \uD53C\uBD80"
+    glyph: "\uBC29"
+    branch: 2
+    position: {x: -5, y: 1}
+    keystone: 0
+    effects:
+    - stat: 3
+      value: -0.04
+    links:
+    - def_4l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: def_6
+    title: "\uD754\uB4E4\uB9BC \uC5C6\uB294 \uBC1C"
+    glyph: "\uBC29"
+    branch: 2
+    position: {x: -6, y: 0}
+    keystone: 0
+    effects:
+    - stat: 3
+      value: -0.05
+    links:
+    - def_K1
+    - def_5l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: def_K2
+    title: "\uBD88\uAD74"
+    glyph: "\uBD88"
+    branch: 2
+    position: {x: -7, y: 0}
+    keystone: 1
+    effects:
+    - stat: 4
+      value: 50
+    - stat: 3
+      value: -0.08
+    links:
+    - def_6
+    rareCost: {fileID: 11400000, guid: b73629710e1e79844ad02d0374356ab1, type: 2}
+    rareAmount: 2
+  - id: sur_1
+    title: "\uAE4A\uC740 \uD638\uD761"
+    glyph: "\uC9C0"
+    branch: 3
+    position: {x: 0, y: 1}
+    keystone: 0
+    effects:
+    - stat: 6
+      value: 10
+    links:
+    - root
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: sur_2
+    title: "\uBE60\uB978 \uD68C\uBCF5"
+    glyph: "\uAE30"
+    branch: 3
+    position: {x: 0, y: 2}
+    keystone: 0
+    effects:
+    - stat: 7
+      value: 0.08
+    links:
+    - sur_1
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: sur_3u
+    title: "\uAC00\uBCBC\uC6B4 \uBC1C"
+    glyph: "\uD68C"
+    branch: 3
+    position: {x: -1, y: 3}
+    keystone: 0
+    effects:
+    - stat: 8
+      value: 0.03
+    links:
+    - sur_2
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: sur_4u
+    title: "\uBC14\uB78C \uD0C0\uAE30"
+    glyph: "\uD68C"
+    branch: 3
+    position: {x: -1, y: 4}
+    keystone: 0
+    effects:
+    - stat: 8
+      value: 0.03
+    links:
+    - sur_3u
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: sur_K1
+    title: "\uADF8\uB9BC\uC790 \uAC78\uC74C"
+    glyph: "\uC601"
+    branch: 3
+    position: {x: -1, y: 5}
+    keystone: 1
+    effects:
+    - stat: 8
+      value: 0.06
+    - stat: 7
+      value: 0.1
+    links:
+    - sur_4u
+    rareCost: {fileID: 11400000, guid: 944af1e220872674cb5b1696263e5040, type: 2}
+    rareAmount: 1
+  - id: sur_3l
+    title: "\uC57D\uCD08 \uC9C0\uC2DD"
+    glyph: "\uBCD1"
+    branch: 3
+    position: {x: 1, y: 3}
+    keystone: 0
+    effects:
+    - stat: 9
+      value: 0.04
+    links:
+    - sur_2
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: sur_4l
+    title: "\uC9C4\uD55C \uC57D"
+    glyph: "\uBCD1"
+    branch: 3
+    position: {x: 1, y: 4}
+    keystone: 0
+    effects:
+    - stat: 9
+      value: 0.04
+    links:
+    - sur_3l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: sur_5l
+    title: "\uC9C0\uAD6C\uB825"
+    glyph: "\uC9C0"
+    branch: 3
+    position: {x: 1, y: 5}
+    keystone: 0
+    effects:
+    - stat: 6
+      value: 15
+    links:
+    - sur_4l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: sur_6
+    title: "\uBA48\uCD94\uC9C0 \uC54A\uB294 \uC228"
+    glyph: "\uAE30"
+    branch: 3
+    position: {x: 0, y: 6}
+    keystone: 0
+    effects:
+    - stat: 7
+      value: 0.1
+    links:
+    - sur_K1
+    - sur_5l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: sur_K2
+    title: "\uB048\uC9C8\uAE34 \uC0DD\uBA85"
+    glyph: "\uC0DD"
+    branch: 3
+    position: {x: 0, y: 7}
+    keystone: 1
+    effects:
+    - stat: 9
+      value: 0.1
+    - stat: 6
+      value: 20
+    links:
+    - sur_6
+    rareCost: {fileID: 11400000, guid: 944af1e220872674cb5b1696263e5040, type: 2}
+    rareAmount: 2
+  - id: hun_1
+    title: "\uD63C \uAC70\uB450\uAE30"
+    glyph: "\uD63C"
+    branch: 4
+    position: {x: 0, y: -1}
+    keystone: 0
+    effects:
+    - stat: 10
+      value: 0.05
+    links:
+    - root
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: hun_2
+    title: "\uD63C\uC758 \uAC08\uC99D"
+    glyph: "\uD63C"
+    branch: 4
+    position: {x: 0, y: -2}
+    keystone: 0
+    effects:
+    - stat: 10
+      value: 0.05
+    links:
+    - hun_1
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: hun_3u
+    title: "\uAF3C\uAF3C\uD55C \uC190\uC9C8"
+    glyph: "\uC7AC"
+    branch: 4
+    position: {x: -1, y: -3}
+    keystone: 0
+    effects:
+    - stat: 11
+      value: 0.1
+    links:
+    - hun_2
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: hun_4u
+    title: "\uAC08\uBB34\uB9AC \uC694\uB839"
+    glyph: "\uC7AC"
+    branch: 4
+    position: {x: -1, y: -4}
+    keystone: 0
+    effects:
+    - stat: 11
+      value: 0.1
+    links:
+    - hun_3u
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: hun_K1
+    title: "\uAC08\uBB34\uB9AC \uBA85\uC778"
+    glyph: "\uBA85"
+    branch: 4
+    position: {x: -1, y: -5}
+    keystone: 1
+    effects:
+    - stat: 11
+      value: 0.2
+    - stat: 12
+      value: 0.05
+    links:
+    - hun_4u
+    rareCost: {fileID: 11400000, guid: 944af1e220872674cb5b1696263e5040, type: 2}
+    rareAmount: 1
+  - id: hun_3l
+    title: "\uD76C\uBBF8\uD55C \uAE30\uCC99"
+    glyph: "\uD76C"
+    branch: 4
+    position: {x: 1, y: -3}
+    keystone: 0
+    effects:
+    - stat: 12
+      value: 0.03
+    links:
+    - hun_2
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: hun_4l
+    title: "\uD63C\uC758 \uBA54\uC544\uB9AC"
+    glyph: "\uD63C"
+    branch: 4
+    position: {x: 1, y: -4}
+    keystone: 0
+    effects:
+    - stat: 10
+      value: 0.08
+    links:
+    - hun_3l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: hun_5l
+    title: "\uC9D9\uC740 \uAE30\uCC99"
+    glyph: "\uD76C"
+    branch: 4
+    position: {x: 1, y: -5}
+    keystone: 0
+    effects:
+    - stat: 12
+      value: 0.03
+    links:
+    - hun_4l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: hun_6
+    title: "\uD63C\uC758 \uD3EC\uC2DD"
+    glyph: "\uD63C"
+    branch: 4
+    position: {x: 0, y: -6}
+    keystone: 0
+    effects:
+    - stat: 10
+      value: 0.08
+    links:
+    - hun_K1
+    - hun_5l
+    rareCost: {fileID: 0}
+    rareAmount: 0
+  - id: hun_K2
+    title: "\uC0AC\uB0E5\uAFBC\uC758 \uC9D1\uB150"
+    glyph: "\uC9D1"
+    branch: 4
+    position: {x: 0, y: -7}
+    keystone: 1
+    effects:
+    - stat: 13
+      value: 1
+    - stat: 10
+      value: 0.1
+    links:
+    - hun_6
+    rareCost: {fileID: 11400000, guid: 944af1e220872674cb5b1696263e5040, type: 2}
+    rareAmount: 2

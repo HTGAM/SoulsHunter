@@ -138,9 +138,7 @@ MonoBehaviour:
   demonStaminaPerSecond: 12
   vaultUpVelocity: 11
   vaultForwardSpeed: 6
-  vaultStaminaCost: 18
   counterWindow: 0.7
-  counterStaminaCost: 10
   visuals:
   - shape: 3
     position: {x: 0.45, y: 1.1, z: 0.65}
@@ -160,3 +158,6 @@ MonoBehaviour:
     scale: {x: 0.08, y: 0.7, z: 0.55}
     color: {r: 0.42, g: 0.3, b: 0.2, a: 1}
     isShield: 1
+  rightModel: {fileID: 7467726477993706475, guid: e54190649dd1f3a47a247edd77e4cb35, type: 3}
+  rightModelAtGrip: 1
+  leftModel: {fileID: 8302023129695973477, guid: 996381655a13fc44786a42408b1bca3a, type: 3}

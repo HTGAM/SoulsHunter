@@ -55,7 +55,7 @@ namespace SoulsHunter.UI
             sb.Append($"시간          {Format(r.time)}");
             if (r.newRecord) sb.Append("   <color=#FFD27A>NEW RECORD!</color>");
             sb.Append('\n');
-            sb.Append($"쓰러진 횟수   {r.faints} / {r.quest.maxFaints}\n");
+            sb.Append($"쓰러진 횟수   {r.faints} / {HuntManager.FaintLimit(r.quest)}\n");
             if (r.success)
             {
                 var rec = HuntManager.Instance ? HuntManager.Instance.GetRecord(r.quest) : null;
@@ -67,6 +67,7 @@ namespace SoulsHunter.UI
             if (r.items.Count == 0) sb.Append("<color=#888888>없음</color>");
             foreach (var (item, amount) in r.items)
                 sb.Append($"<color=#{ColorUtility.ToHtmlStringRGB(item.RarityColor)}>{item.DisplayName}</color>  x{amount}\n");
+            if (r.souls > 0) sb.Append($"<color=#BFE3FF>혼  +{r.souls:N0}</color>\n");
             if (r.unlocked.Count > 0)
             {
                 sb.Append("\n<b><color=#FFD27A>새 퀘스트 해금</color></b>\n");

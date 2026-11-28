@@ -1,5 +1,6 @@
 using System;
 using UnityEngine;
+using SoulsHunter.Progression;
 
 namespace SoulsHunter.Player
 {
@@ -15,21 +16,29 @@ namespace SoulsHunter.Player
         [SerializeField] float regenDelay = 0.8f;
 
         float lastUseTime = float.NegativeInfinity;
+        float maxBonus;
+
+        /// <summary>최대 스태미나 추가치 (스킬 등)</summary>
+        public void SetMaxBonus(float bonus)
+        {
+            maxBonus = Mathf.Max(0f, bonus);
+            Changed?.Invoke(Current, Max);
+        }
 
         public float Current { get; private set; }
-        public float Max => maxStamina;
-        public float Normalized => maxStamina > 0f ? Current / maxStamina : 0f;
+        public float Max => maxStamina + maxBonus;
+        public float Normalized => Max > 0f ? Current / Max : 0f;
         public bool CanUse => Current > 0f;
 
         /// <summary>(현재값, 최대값)</summary>
         public event Action<float, float> Changed;
 
-        void Awake() => Current = maxStamina;
+        void Awake() => Current = Max;
 
         void Update()
         {
-            if (Current >= maxStamina || Time.time - lastUseTime < regenDelay) return;
-            Set(Current + regenPerSecond * Time.deltaTime);
+            if (Current >= Max || Time.time - lastUseTime < regenDelay) return;
+            Set(Current + regenPerSecond * (1f + PlayerSkills.Value(SkillStat.StaminaRegen)) * Time.deltaTime);
         }
 
         /// <summary>한 번에 소모하는 행동(구르기, 공격). 스태미나가 0이면 실패한다.</summary>
@@ -48,14 +57,14 @@ namespace SoulsHunter.Player
             Set(Current - amount);
         }
 
-        public void Refill() => Set(maxStamina);
+        public void Refill() => Set(Max);
 
         void Set(float value)
         {
-            float clamped = Mathf.Clamp(value, 0f, maxStamina);
+            float clamped = Mathf.Clamp(value, 0f, Max);
             if (Mathf.Approximately(clamped, Current)) return;
             Current = clamped;
-            Changed?.Invoke(Current, maxStamina);
+            Changed?.Invoke(Current, Max);
         }
     }
 }

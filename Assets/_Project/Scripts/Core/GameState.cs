@@ -18,6 +18,9 @@ namespace SoulsHunter.Core
         /// </summary>
         public static bool QuestActive { get; set; }
 
+        /// <summary>일시정지 메뉴가 아닌 다른 화면(스킬 트리 등)이 게임을 멈추고 떠 있으면 true. 이때 ESC는 그 화면이 처리한다.</summary>
+        public static bool OverlayOpen { get; set; }
+
         /// <summary>(멈췄는지)</summary>
         public static event Action<bool> PauseChanged;
 
@@ -36,6 +39,7 @@ namespace SoulsHunter.Core
             IsPaused = false;
             PauseMenuAvailable = false;
             QuestActive = false;
+            OverlayOpen = false;
             PauseChanged = null;
         }
     }

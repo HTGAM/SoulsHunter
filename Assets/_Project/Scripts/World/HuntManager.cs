@@ -7,6 +7,7 @@ using SoulsHunter.Core;
 using SoulsHunter.Enemy;
 using SoulsHunter.Items;
 using SoulsHunter.Player;
+using SoulsHunter.Progression;
 
 namespace SoulsHunter.World
 {
@@ -39,6 +40,8 @@ namespace SoulsHunter.World
         [Tooltip("이 시간(초) 안에 한 번도 안 쓰러지고 깨면 S 랭크")]
         public float parTime = 300f;
         public List<MonsterRewards.Reward> rewards = new();
+        [Tooltip("클리어 보상 혼 (첫 클리어는 두 배, S 랭크는 +20%)")]
+        public int soulReward;
         [Tooltip("처음 깼을 때만 추가로 주는 보상")]
         public List<MonsterRewards.Reward> firstClearRewards = new();
         [Tooltip("이 퀘스트들(id)을 모두 깨야 게시판에 나타난다")]
@@ -75,6 +78,8 @@ namespace SoulsHunter.World
         /// <summary>S / A / B (실패면 빈 문자열)</summary>
         public string rank = "";
         public bool newRecord;
+        /// <summary>이번 사냥에서 얻은 혼 (토벌 + 퀘스트 보상)</summary>
+        public int souls;
         /// <summary>처음 깼을 때 (첫 클리어 보상 지급)</summary>
         public bool firstClear;
         /// <summary>이번 클리어로 새로 열린 퀘스트</summary>
@@ -169,11 +174,18 @@ namespace SoulsHunter.World
         PlayerDamageHandler damageHandler;
         PlayerLocomotion locomotion;
         PlayerInventory inventory;
+        PlayerSkills skills;
+        int gainedSouls;
 
         readonly HashSet<Health> alive = new();
         readonly HashSet<string> cleared = new();
         readonly Dictionary<string, QuestRecord> records = new();
         readonly List<(ItemData item, int amount)> gained = new();
+
+        /// <summary>쓰러져도 되는 횟수 (스킬 보너스 포함)</summary>
+
+        public static int FaintLimit(HuntQuest q) => q == null ? 0 : q.maxFaints + Mathf.RoundToInt(PlayerSkills.Value(SkillStat.ExtraFaints));
+
 
         public IEnumerable<QuestRecord> Records => records.Values;
         public QuestRecord GetRecord(HuntQuest q) => q != null && records.TryGetValue(q.id, out var r) ? r : null;
@@ -205,6 +217,8 @@ namespace SoulsHunter.World
                 inventory = player.GetComponent<PlayerInventory>();
                 if (playerHealth) playerHealth.Died += OnPlayerDied;
                 if (inventory) inventory.ItemAdded += OnItemAdded;
+                skills = player.GetComponent<PlayerSkills>();
+                if (skills) skills.SoulsGained += OnSoulsGained;
             }
             SetHubRespawn();
             HideAllEnemies();
@@ -215,8 +229,18 @@ namespace SoulsHunter.World
             if (Instance == this) Instance = null;
             if (playerHealth) playerHealth.Died -= OnPlayerDied;
             if (inventory) inventory.ItemAdded -= OnItemAdded;
+            if (skills) skills.SoulsGained -= OnSoulsGained;
             GameState.QuestActive = false;
         }
+
+        void OnSoulsGained(int amount)
+
+        {
+
+            if (CurrentPhase != Phase.Idle) gainedSouls += amount;
+
+        }
+
 
         void OnItemAdded(ItemData item, int amount)
         {
@@ -254,6 +278,7 @@ namespace SoulsHunter.World
             startTime = Time.time;
             endTime = 0f;
             gained.Clear();
+            gainedSouls = 0;
 
             HideAllEnemies();
             RefillPlayer();
@@ -319,12 +344,12 @@ namespace SoulsHunter.World
         {
             if (CurrentPhase != Phase.Hunting) return;
             Faints++;
-            if (Faints >= Active.maxFaints)
+            if (Faints >= FaintLimit(Active))
             {
-                GameEvents.Notify($"<color=#FF6A5A>{Active.maxFaints}번 쓰러졌어요.</color>");
+                GameEvents.Notify($"<color=#FF6A5A>{FaintLimit(Active)}번 쓰러졌어요.</color>");
                 Fail();
             }
-            else GameEvents.Notify($"<color=#FF6A5A>쓰러졌어요  ({Faints} / {Active.maxFaints})</color>  몬스터 체력은 그대로예요.");
+            else GameEvents.Notify($"<color=#FF6A5A>쓰러졌어요  ({Faints} / {FaintLimit(Active)})</color>  몬스터 체력은 그대로예요.");
         }
 
         // ───────── 끝 ─────────
@@ -338,15 +363,25 @@ namespace SoulsHunter.World
             GiveRewards(Active.rewards);
             if (firstClear) GiveRewards(Active.firstClearRewards);
 
-            var result = MakeResult(true);
-            result.firstClear = firstClear;
+            // 퀘스트 보상 혼: 첫 클리어 두 배, S 랭크 +20%
+
+            string rank = RankFor(Active, endTime - startTime, Faints);
+
+            int soulReward = Active.soulReward * (firstClear ? 2 : 1);
+
+            if (rank == "S") soulReward = Mathf.RoundToInt(soulReward * 1.2f);
+
+            if (skills) skills.AddSouls(soulReward);
+
+
+            var result = MakeResult(true);            result.firstClear = firstClear;
             foreach (var q in lockedBefore)
                 if (IsUnlocked(q))
                 {
                     result.unlocked.Add(q);
                     GameEvents.Notify($"<color=#FFD27A>새 퀘스트가 열렸어요: {q.title}</color>");
                 }
-            result.rank = RankFor(Active, result.time, Faints);
+            result.rank = rank;
             if (!records.TryGetValue(Active.id, out var rec)) records[Active.id] = rec = new QuestRecord { id = Active.id };
             rec.clears++;
             if (rec.bestTime < 0f || result.time < rec.bestTime)
@@ -371,7 +406,7 @@ namespace SoulsHunter.World
 
         HuntResult MakeResult(bool success)
         {
-            var r = new HuntResult { quest = Active, success = success, time = Elapsed, faints = Faints };
+            var r = new HuntResult { quest = Active, success = success, time = Elapsed, faints = Faints, souls = gainedSouls };
             r.items.AddRange(gained);
             return r;
         }

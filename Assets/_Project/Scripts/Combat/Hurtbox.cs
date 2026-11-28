@@ -46,7 +46,7 @@ namespace SoulsHunter.Combat
 
             if (breakThreshold > 0f && !IsBroken)
             {
-                partDamage += info.Amount;
+                partDamage += info.Amount * (info.BreakMultiplier > 0f ? info.BreakMultiplier : 1f);
                 if (partDamage >= breakThreshold)
                 {
                     IsBroken = true;

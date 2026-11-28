@@ -5,6 +5,7 @@ using UnityEngine;
 using SoulsHunter.Core;
 using SoulsHunter.Items;
 using SoulsHunter.Player;
+using SoulsHunter.Progression;
 using SoulsHunter.World;
 
 namespace SoulsHunter.Save
@@ -36,6 +37,8 @@ namespace SoulsHunter.Save
             public int weaponLevel;
             public int armorLevel;
             public int flaskLevel;
+            public int souls;
+            public List<string> skills = new();
             public string equippedWeapon = "";
             public List<string> clearedQuests = new();
             public List<QuestRecord> questRecords = new();
@@ -52,6 +55,7 @@ namespace SoulsHunter.Save
         PlayerWeapon weapon;
         PlayerArmor armor;
         PlayerFlaskUpgrade flaskUpgrade;
+        PlayerSkills skills;
 
         bool loading;
         float autosaveAt = float.PositiveInfinity;
@@ -62,18 +66,21 @@ namespace SoulsHunter.Save
             weapon = GetComponent<PlayerWeapon>();
             armor = GetComponent<PlayerArmor>();
             flaskUpgrade = GetComponent<PlayerFlaskUpgrade>();
+            skills = GetComponent<PlayerSkills>();
         }
 
         void OnEnable()
         {
             GameEvents.ProgressChanged += Save;
             if (inventory) inventory.Changed += OnInventoryChanged;
+            if (skills) skills.Changed += OnInventoryChanged;
         }
 
         void OnDisable()
         {
             GameEvents.ProgressChanged -= Save;
             if (inventory) inventory.Changed -= OnInventoryChanged;
+            if (skills) skills.Changed -= OnInventoryChanged;
         }
 
         void Start()
@@ -113,6 +120,11 @@ namespace SoulsHunter.Save
             }
             if (armor) data.armorLevel = armor.Level;
             if (flaskUpgrade) data.flaskLevel = flaskUpgrade.Level;
+            if (skills)
+            {
+                data.souls = skills.Souls;
+                data.skills.AddRange(skills.Unlocked);
+            }
             if (HuntManager.Instance)
             {
                 data.clearedQuests.AddRange(HuntManager.Instance.ClearedIds);
@@ -170,6 +182,7 @@ namespace SoulsHunter.Save
                 }
                 if (armor) armor.SetLevel(data.armorLevel);
                 if (flaskUpgrade) flaskUpgrade.SetLevel(data.flaskLevel);
+                if (skills) skills.Restore(data.souls, data.skills);
 
                 if (HuntManager.Instance)
                 {

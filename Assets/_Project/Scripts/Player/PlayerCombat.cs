@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using UnityEngine;
 using SoulsHunter.Combat;
 using SoulsHunter.Core;
+using SoulsHunter.Progression;
 
 namespace SoulsHunter.Player
 {
@@ -439,7 +440,10 @@ namespace SoulsHunter.Player
 
             float chargeMult = 1f + chargeLevel * a.chargeDamagePerLevel;
             float poiseMult = 1f + chargeLevel * a.chargePoisePerLevel;
-            float damage = a.damage * (weapon ? weapon.DamageMultiplier : 1f) * ExternalDamageMultiplier * chargeMult * damageScale;
+            float damage = a.damage * (weapon ? weapon.DamageMultiplier : 1f) * ExternalDamageMultiplier * chargeMult * damageScale
+                           * (1f + PlayerSkills.Value(SkillStat.AttackPower));
+            float weakBonus = PlayerSkills.Value(SkillStat.WeakPointDamage);
+            float breakMult = 1f + PlayerSkills.Value(SkillStat.PartBreak);
             poiseMult *= damageScale;
 
             bool anyHit = false;
@@ -448,7 +452,8 @@ namespace SoulsHunter.Player
                 hitThisSwing.Add(kv.Key);
                 var info = new DamageInfo
                 {
-                    Amount = damage,
+                    Amount = kv.Value.box.DamageMultiplier > 1f ? damage * (1f + weakBonus) : damage,
+                    BreakMultiplier = breakMult,
                     PoiseDamage = a.poiseDamage * poiseMult,
                     Point = kv.Value.point,
                     Direction = transform.forward,

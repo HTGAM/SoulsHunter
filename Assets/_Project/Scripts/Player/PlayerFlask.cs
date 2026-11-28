@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using SoulsHunter.Combat;
 using SoulsHunter.Core;
+using SoulsHunter.Progression;
 
 namespace SoulsHunter.Player
 {
@@ -89,7 +90,7 @@ namespace SoulsHunter.Player
             if (!healed && timer >= healTime)
             {
                 healed = true;
-                health.Heal(health.Max * healPercent);
+                health.Heal(health.Max * (healPercent + PlayerSkills.Value(SkillStat.FlaskHeal)));
             }
             if (timer >= drinkDuration) IsDrinking = false;
         }

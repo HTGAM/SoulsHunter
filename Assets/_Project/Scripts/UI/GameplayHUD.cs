@@ -115,7 +115,7 @@ namespace SoulsHunter.UI
             else if (m && m.Active != null)
             {
                 var q = m.Active;
-                string faintColor = m.Faints >= q.maxFaints - 1 && m.Faints > 0 ? "FF6A5A" : "FFFFFF";
+                string faintColor = m.Faints >= HuntManager.FaintLimit(q) - 1 && m.Faints > 0 ? "FF6A5A" : "FFFFFF";
                 var sb = new StringBuilder($"<b>{q.title}</b>\n<size=20>");
                 if (m.CurrentPhase == HuntManager.Phase.Hunting)
                 {
@@ -124,7 +124,7 @@ namespace SoulsHunter.UI
                     sb.Append(m.WaveIndex < 0 ? "곧 시작" : $"남은 적  {m.AliveInWave}");
                     sb.Append('\n');
                 }
-                sb.Append($"쓰러진 횟수  <color=#{faintColor}>{m.Faints} / {q.maxFaints}</color>\n");
+                sb.Append($"쓰러진 횟수  <color=#{faintColor}>{m.Faints} / {HuntManager.FaintLimit(q)}</color>\n");
                 sb.Append($"경과  {FormatTime(m.Elapsed)}");
                 if (m.CurrentPhase == HuntManager.Phase.Returning)
                     sb.Append($"\n<color=#FFD27A>안전구역 귀환까지 {Mathf.CeilToInt(m.ReturnIn)}초</color>");
@@ -141,6 +141,8 @@ namespace SoulsHunter.UI
             float now = Time.unscaledTime;
 
             string status = flask ? $"회복약  {flask.Charges} / {flask.MaxCharges}" : "";
+            var skills = SoulsHunter.Progression.PlayerSkills.Instance;
+            if (skills) status = $"{status}\n<color=#BFE3FF>혼  {skills.Souls:N0}</color>";
             if (armor) status = $"<size=20><color=#CCCCCC>{armor.DisplayName}</color></size>\n{status}";
             if (weapon) status = $"<size=20><color=#CCCCCC>{weapon.DisplayName}</color></size>\n{status}";
             string special = weaponSpecial ? weaponSpecial.StatusText : "";

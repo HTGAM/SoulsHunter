@@ -15,6 +15,8 @@ namespace SoulsHunter.Combat
         public string Part;
         /// <summary>부위 데미지 배율 (약점 > 1, 단단한 부위 < 1). Hurtbox를 거치지 않았으면 0.</summary>
         public float PartMultiplier;
+        /// <summary>부위 파괴 누적치 배율 (0이면 1로 취급). 체력 피해에는 영향 없음.</summary>
+        public float BreakMultiplier;
     }
 
     /// <summary>
@@ -33,11 +35,12 @@ namespace SoulsHunter.Combat
 
         float poise;
         float lastHitTime = float.NegativeInfinity;
+        float maxBonus;
 
         public string DisplayName => string.IsNullOrEmpty(displayName) ? gameObject.name : displayName;
         public float Current { get; private set; }
-        public float Max => maxHealth;
-        public float Normalized => maxHealth > 0f ? Current / maxHealth : 0f;
+        public float Max => maxHealth + maxBonus;
+        public float Normalized => Max > 0f ? Current / Max : 0f;
         public bool IsDead => Current <= 0f;
 
         /// <summary>true를 반환하면 피해를 무시한다 (구르기 무적 등).</summary>
@@ -100,7 +103,7 @@ namespace SoulsHunter.Combat
 
             lastHitTime = Time.time;
             Current = Mathf.Max(0f, Current - info.Amount);
-            Changed?.Invoke(Current, maxHealth);
+            Changed?.Invoke(Current, Max);
             Damaged?.Invoke(info);
             AnyDamaged?.Invoke(this, info);
 
@@ -122,15 +125,26 @@ namespace SoulsHunter.Combat
         public void Heal(float amount)
         {
             if (IsDead) return;
-            Current = Mathf.Min(maxHealth, Current + amount);
-            Changed?.Invoke(Current, maxHealth);
+            Current = Mathf.Min(Max, Current + amount);
+            Changed?.Invoke(Current, Max);
+        }
+
+        /// <summary>최대 체력 추가치 (스킬 등). 늘어난 만큼 현재 체력도 같이 오른다.</summary>
+        public void SetMaxBonus(float bonus)
+        {
+            bonus = Mathf.Max(0f, bonus);
+            if (Mathf.Approximately(bonus, maxBonus)) return;
+            float delta = bonus - maxBonus;
+            maxBonus = bonus;
+            if (!IsDead) Current = Mathf.Clamp(Current + Mathf.Max(0f, delta), 0f, Max);
+            Changed?.Invoke(Current, Max);
         }
 
         public void ResetHealth()
         {
-            Current = maxHealth;
+            Current = Max;
             poise = maxPoise;
-            Changed?.Invoke(Current, maxHealth);
+            Changed?.Invoke(Current, Max);
         }
     }
 }

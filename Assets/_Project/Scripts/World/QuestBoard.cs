@@ -113,7 +113,7 @@ namespace SoulsHunter.World
         static string Summary(HuntQuest q)
         {
             var sb = new StringBuilder();
-            sb.Append($"{q.arenaName} · 웨이브 {q.waves.Count} · {q.maxFaints}회 쓰러지면 실패");
+            sb.Append($"{q.arenaName} · 웨이브 {q.waves.Count} · {HuntManager.FaintLimit(q)}회 쓰러지면 실패");
             bool first = true;
             foreach (var r in q.rewards)
             {

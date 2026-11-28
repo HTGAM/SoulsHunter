@@ -12,6 +12,7 @@ using System.Collections.Generic;
 using SoulsHunter.Player;
 using SoulsHunter.Save;
 using SoulsHunter.UI;
+using SoulsHunter.Progression;
 
 namespace SoulsHunter.EditorTools
 {
@@ -29,7 +30,7 @@ namespace SoulsHunter.EditorTools
         {
             "Arena", "Bonfire", "Dummies",
             "Player", "LockOnMarker", "HUD", "Forge", "Armor Bench", "Quest Board",
-            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack", "Apothecary",
+            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack", "Apothecary", "Soul Altar",
         };
 
         static readonly Vector3 HubSpawn = new(0f, 0f, -4f);
@@ -133,11 +134,13 @@ namespace SoulsHunter.EditorTools
             hud.gameObject.AddComponent<PauseMenu>();
             hud.gameObject.AddComponent<DamageNumbers>();
             hud.gameObject.AddComponent<QuestResultScreen>();
+            hud.gameObject.AddComponent<SkillTreeScreen>();
 
             // 안전구역 시설
             BuildForge(new Vector3(5f, 0f, 2f));
             BuildArmorBench(new Vector3(8f, 0f, -2f));
             BuildApothecary(new Vector3(4f, 0f, -9f));
+            BuildSoulAltar(new Vector3(-4f, 0f, -9f));
             SetupProgression(player);
             BuildQuestBoard(new Vector3(-4f, 0f, 3f));
             BuildDepartureGate(new Vector3(0f, 0f, 11f));
@@ -210,6 +213,7 @@ namespace SoulsHunter.EditorTools
             var fang = GetOrCreateItem("RavagerFang", "강철 엄니", "머리를 파괴해야 얻을 수 있는 엄니.", 3);
             var spike = GetOrCreateItem("RavagerTailSpike", "꼬리 가시", "꼬리를 파괴해야 얻을 수 있는 가시.", 3);
             var rewards = boss.AddComponent<MonsterRewards>();
+            rewards.EditorSetupSouls(300, SkillTreeSetup.IronSoul(), 0.2f);
             rewards.EditorSetup(
                 new List<MonsterRewards.Reward>
                 {
@@ -492,7 +496,7 @@ namespace SoulsHunter.EditorTools
             {
                 new()
                 {
-                    id = "hunt_hounds", title = "잿빛 들개 사냥", arenaName = "투기장",
+                    id = "hunt_hounds", title = "잿빛 들개 사냥", arenaName = "투기장", soulReward = 60,
                     description = "투기장에 풀린 잿빛 들개 두 마리를 사냥하라.",
                     arenaSpawn = arenaSpawn, waves = new() { q1Wave }, maxFaints = 3, parTime = 90f,
                     firstClearRewards = new() { new() { item = fur, min = 3, max = 3 }, new() { item = tooth, min = 2, max = 2 } },
@@ -504,7 +508,7 @@ namespace SoulsHunter.EditorTools
                 },
                 new()
                 {
-                    id = "hunt_ravager", title = "철갑의 포식자", arenaName = "투기장",
+                    id = "hunt_ravager", title = "철갑의 포식자", arenaName = "투기장", soulReward = 300,
                     description = "Ravager, the Iron Maw를 토벌하라.",
                     arenaSpawn = arenaSpawn, waves = new() { q2Wave }, maxFaints = 3, parTime = 240f,
                     requires = new() { "hunt_hounds" },
@@ -518,7 +522,7 @@ namespace SoulsHunter.EditorTools
                 },
                 new()
                 {
-                    id = "rush_colosseum", title = "투기장의 시련 (보스 러시)", arenaName = "투기장",
+                    id = "rush_colosseum", title = "투기장의 시련 (보스 러시)", arenaName = "투기장", soulReward = 900,
                     description = "쉬지 않고 이어지는 세 번의 싸움을 버텨라.",
                     arenaSpawn = arenaSpawn, waves = new() { rush1, rush2, rush3 }, maxFaints = 3, parTime = 600f,
                     requires = new() { "hunt_ravager", "hunt_wyrm" },
@@ -536,7 +540,7 @@ namespace SoulsHunter.EditorTools
                 },
                 new()
                 {
-                    id = "hunt_wyrm", title = "잿불의 비룡", arenaName = "투기장",
+                    id = "hunt_wyrm", title = "잿불의 비룡", arenaName = "투기장", soulReward = 400,
                     description = "거리를 벌리고 불을 뿜는 Cinder Wyrm을 토벌하라. 파고들어라.",
                     arenaSpawn = arenaSpawn, waves = new() { q4Wave }, maxFaints = 3, parTime = 270f,
                     requires = new() { "hunt_ravager" },
@@ -562,6 +566,37 @@ namespace SoulsHunter.EditorTools
             var manager = managerGo.AddComponent<HuntManager>();
             manager.EditorSetup(hubSpawn.transform, quests);
             EditorUtility.SetDirty(manager);
+        }
+
+        /// <summary>혼의 제단: 돌 받침 + 푸른 불꽃. 스킬 트리를 연다.</summary>
+        static void BuildSoulAltar(Vector3 pos)
+        {
+            var root = Create("Soul Altar");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.Euler(0f, -20f, 0f);
+
+            var stoneMat = MakeMaterial(new Color(0.32f, 0.33f, 0.36f));
+            var flameMat = MakeMaterial(new Color(0.4f, 0.7f, 1f));
+            flameMat.EnableKeyword("_EMISSION");
+            flameMat.SetColor("_EmissionColor", new Color(0.35f, 0.65f, 1f) * 3f);
+
+            Primitive(PrimitiveType.Cylinder, "Base", root.transform, new Vector3(0f, 0.15f, 0f), new Vector3(1.6f, 0.15f, 1.6f), stoneMat);
+            Primitive(PrimitiveType.Cube, "Pillar", root.transform, new Vector3(0f, 0.75f, 0f), new Vector3(0.6f, 1.2f, 0.6f), stoneMat);
+            Visual(PrimitiveType.Cylinder, "Bowl", root.transform, new Vector3(0f, 1.4f, 0f), new Vector3(0.9f, 0.08f, 0.9f), stoneMat);
+            Visual(PrimitiveType.Sphere, "Soul Flame", root.transform, new Vector3(0f, 1.7f, 0f), new Vector3(0.45f, 0.6f, 0.45f), flameMat);
+
+            var lightGo = new GameObject("Soul Light");
+            lightGo.transform.SetParent(root.transform, false);
+            lightGo.transform.localPosition = new Vector3(0f, 2f, 0f);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(0.45f, 0.7f, 1f);
+            light.range = 6f;
+            light.intensity = 2f;
+
+            var altar = root.AddComponent<SoulAltar>();
+            altar.EditorSetup(light);
+            EditorUtility.SetDirty(altar);
         }
 
         /// <summary>약재상: 약초 선반 + 솥. 회복약 최대 횟수를 늘린다.</summary>
@@ -677,6 +712,7 @@ namespace SoulsHunter.EditorTools
             var fur = GetOrCreateItem("AshenFur", "잿빛 털", "잿빛 들개의 거친 털. 흔한 소재.", 1);
             var tooth = GetOrCreateItem("HoundFang", "들개 이빨", "날카로운 송곳니. 무기 강화에 쓴다.", 1);
             var rewards = hound.AddComponent<MonsterRewards>();
+            rewards.EditorSetupSouls(15, null, 0f);
             rewards.EditorSetup(
                 new List<MonsterRewards.Reward>
                 {
@@ -764,14 +800,19 @@ namespace SoulsHunter.EditorTools
             });
             EditorUtility.SetDirty(flaskUpgrade);
 
+            // 혼의 스킬 트리
+            var skills = player.AddComponent<PlayerSkills>();
+            skills.EditorSetup(SkillTreeSetup.GetOrCreate());
+            EditorUtility.SetDirty(skills);
+
             var save = player.AddComponent<SaveSystem>();
-            save.EditorSetup(new List<ItemData> { scale, hide, gem, fang, spike, fur, tooth, wScale, wMembrane, wHorn, wCore });
+            save.EditorSetup(new List<ItemData> { scale, hide, gem, fang, spike, fur, tooth, wScale, wMembrane, wHorn, wCore, SkillTreeSetup.IronSoul(), SkillTreeSetup.CinderSoul() });
             EditorUtility.SetDirty(save);
         }
 
         const string ItemFolder = "Assets/_Project/Data/Items";
 
-        static ItemData GetOrCreateItem(string file, string name, string desc, int rarity)
+        internal static ItemData GetOrCreateItem(string file, string name, string desc, int rarity)
         {
             string path = $"{ItemFolder}/{file}.asset";
             var item = AssetDatabase.LoadAssetAtPath<ItemData>(path);
@@ -841,6 +882,7 @@ namespace SoulsHunter.EditorTools
 
             var (wScale, wMembrane, wHorn, wCore) = WyrmItems();
             var rewards = wyrm.AddComponent<MonsterRewards>();
+            rewards.EditorSetupSouls(400, SkillTreeSetup.CinderSoul(), 0.2f);
             rewards.EditorSetup(
                 new List<MonsterRewards.Reward>
                 {

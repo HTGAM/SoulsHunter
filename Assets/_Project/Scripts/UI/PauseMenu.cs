@@ -56,7 +56,7 @@ namespace SoulsHunter.UI
 
         void Update()
         {
-            if (!input || !input.PausePressed) return;
+            if (!input || !input.PausePressed || GameState.OverlayOpen) return;
             if (!GameState.IsPaused) Pause();
             else if (controlsPanel.activeSelf) ShowControls(false);
             else Resume();

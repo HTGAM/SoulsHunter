@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using SoulsHunter.CameraSystem;
 using SoulsHunter.Core;
+using SoulsHunter.Progression;
 
 namespace SoulsHunter.Player
 {
@@ -311,14 +312,14 @@ namespace SoulsHunter.Player
                 dodgeDirection = -transform.forward;
                 dodgeDistance = backstepDistance * Mathf.Max(0.6f, DodgeDistanceMultiplier);
                 dodgeDuration = backstepDuration;
-                dodgeIFrames = backstepInvulnerability;
+                dodgeIFrames = backstepInvulnerability + new Vector2(0f, PlayerSkills.Value(SkillStat.DodgeInvulnerability));
             }
             else
             {
                 dodgeDirection = moveDir.normalized;
                 dodgeDistance = rollDistance * DodgeDistanceMultiplier;
                 dodgeDuration = rollDuration;
-                dodgeIFrames = rollInvulnerability;
+                dodgeIFrames = rollInvulnerability + new Vector2(0f, PlayerSkills.Value(SkillStat.DodgeInvulnerability));
                 // 락온이 아닐 땐 구르는 방향으로 즉시 몸을 돌린다
                 if (!TryGetLockPosition(out _)) transform.rotation = Quaternion.LookRotation(dodgeDirection);
             }

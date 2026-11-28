@@ -2,6 +2,7 @@ using System;
 using UnityEngine;
 using SoulsHunter.Combat;
 using SoulsHunter.Core;
+using SoulsHunter.Progression;
 
 namespace SoulsHunter.Player
 {
@@ -149,7 +150,8 @@ namespace SoulsHunter.Player
                 return true; // 피해 없음
             }
 
-            float cost = Mathf.Max(minStaminaCost * (Weapon ? Weapon.guardStaminaMultiplier : 1f), info.Amount * StaminaPerDamage);
+            float cost = Mathf.Max(minStaminaCost * (Weapon ? Weapon.guardStaminaMultiplier : 1f), info.Amount * StaminaPerDamage)
+                         * Mathf.Max(0.2f, 1f - PlayerSkills.Value(SkillStat.GuardStamina));
             if (stamina.Current >= cost)
             {
                 stamina.Drain(cost);

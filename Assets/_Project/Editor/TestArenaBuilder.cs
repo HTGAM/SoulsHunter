@@ -29,7 +29,7 @@ namespace SoulsHunter.EditorTools
         {
             "Arena", "Bonfire", "Dummies",
             "Player", "LockOnMarker", "HUD", "Forge", "Armor Bench", "Quest Board",
-            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack",
+            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack", "Apothecary",
         };
 
         static readonly Vector3 HubSpawn = new(0f, 0f, -4f);
@@ -134,6 +134,7 @@ namespace SoulsHunter.EditorTools
             // 안전구역 시설
             BuildForge(new Vector3(5f, 0f, 2f));
             BuildArmorBench(new Vector3(8f, 0f, -2f));
+            BuildApothecary(new Vector3(4f, 0f, -9f));
             SetupProgression(player);
             BuildQuestBoard(new Vector3(-4f, 0f, 3f));
             BuildDepartureGate(new Vector3(0f, 0f, 11f));
@@ -488,6 +489,7 @@ namespace SoulsHunter.EditorTools
                     id = "hunt_hounds", title = "잿빛 들개 사냥", arenaName = "투기장",
                     description = "투기장에 풀린 잿빛 들개 두 마리를 사냥하라.",
                     arenaSpawn = arenaSpawn, waves = new() { q1Wave }, maxFaints = 3, parTime = 90f,
+                    firstClearRewards = new() { new() { item = fur, min = 3, max = 3 }, new() { item = tooth, min = 2, max = 2 } },
                     rewards = new()
                     {
                         new() { item = fur, min = 2, max = 3 },
@@ -499,6 +501,8 @@ namespace SoulsHunter.EditorTools
                     id = "hunt_ravager", title = "철갑의 포식자", arenaName = "투기장",
                     description = "Ravager, the Iron Maw를 토벌하라.",
                     arenaSpawn = arenaSpawn, waves = new() { q2Wave }, maxFaints = 3, parTime = 240f,
+                    requires = new() { "hunt_hounds" },
+                    firstClearRewards = new() { new() { item = gem, min = 1, max = 1 }, new() { item = hide, min = 2, max = 2 } },
                     rewards = new()
                     {
                         new() { item = scale, min = 2, max = 3 },
@@ -511,6 +515,8 @@ namespace SoulsHunter.EditorTools
                     id = "rush_colosseum", title = "투기장의 시련 (보스 러시)", arenaName = "투기장",
                     description = "쉬지 않고 이어지는 세 번의 싸움을 버텨라.",
                     arenaSpawn = arenaSpawn, waves = new() { rush1, rush2, rush3 }, maxFaints = 3, parTime = 600f,
+                    requires = new() { "hunt_ravager", "hunt_wyrm" },
+                    firstClearRewards = new() { new() { item = gem, min = 1, max = 1 }, new() { item = wCore, min = 1, max = 1 } },
                     rewards = new()
                     {
                         new() { item = scale, min = 4, max = 5 },
@@ -527,6 +533,8 @@ namespace SoulsHunter.EditorTools
                     id = "hunt_wyrm", title = "잿불의 비룡", arenaName = "투기장",
                     description = "거리를 벌리고 불을 뿜는 Cinder Wyrm을 토벌하라. 파고들어라.",
                     arenaSpawn = arenaSpawn, waves = new() { q4Wave }, maxFaints = 3, parTime = 270f,
+                    requires = new() { "hunt_ravager" },
+                    firstClearRewards = new() { new() { item = wCore, min = 1, max = 1 }, new() { item = wMembrane, min = 1, max = 1 } },
                     rewards = new()
                     {
                         new() { item = wScale, min = 2, max = 3 },
@@ -548,6 +556,45 @@ namespace SoulsHunter.EditorTools
             var manager = managerGo.AddComponent<HuntManager>();
             manager.EditorSetup(hubSpawn.transform, quests);
             EditorUtility.SetDirty(manager);
+        }
+
+        /// <summary>약재상: 약초 선반 + 솥. 회복약 최대 횟수를 늘린다.</summary>
+        static void BuildApothecary(Vector3 pos)
+        {
+            var root = Create("Apothecary");
+            root.transform.position = pos;
+            root.transform.rotation = Quaternion.Euler(0f, 20f, 0f);
+
+            var woodMat = MakeMaterial(new Color(0.4f, 0.28f, 0.18f));
+            var potMat = MakeMaterial(new Color(0.18f, 0.18f, 0.2f));
+            var herbMat = MakeMaterial(new Color(0.35f, 0.6f, 0.3f));
+            var flaskMat = MakeMaterial(new Color(0.9f, 0.55f, 0.2f));
+            flaskMat.EnableKeyword("_EMISSION");
+            flaskMat.SetColor("_EmissionColor", new Color(1f, 0.5f, 0.15f) * 1.5f);
+
+            // 선반
+            Primitive(PrimitiveType.Cube, "Shelf", root.transform, new Vector3(0f, 0.9f, 0.5f), new Vector3(2f, 1.8f, 0.4f), woodMat);
+            for (int i = 0; i < 4; i++)
+            {
+                Visual(PrimitiveType.Sphere, "Herb", root.transform, new Vector3(-0.7f + i * 0.45f, 1.55f, 0.25f), new Vector3(0.3f, 0.25f, 0.2f), herbMat);
+                Visual(PrimitiveType.Cylinder, "Flask", root.transform, new Vector3(-0.7f + i * 0.45f, 1.05f, 0.25f), new Vector3(0.14f, 0.12f, 0.14f), flaskMat);
+            }
+            // 솥
+            Primitive(PrimitiveType.Cylinder, "Cauldron", root.transform, new Vector3(0f, 0.35f, -0.6f), new Vector3(0.8f, 0.35f, 0.8f), potMat);
+            Visual(PrimitiveType.Cylinder, "Brew", root.transform, new Vector3(0f, 0.71f, -0.6f), new Vector3(0.65f, 0.02f, 0.65f), flaskMat);
+
+            var lightGo = new GameObject("Brew Light");
+            lightGo.transform.SetParent(root.transform, false);
+            lightGo.transform.localPosition = new Vector3(0f, 1.3f, -0.6f);
+            var light = lightGo.AddComponent<Light>();
+            light.type = LightType.Point;
+            light.color = new Color(1f, 0.6f, 0.25f);
+            light.range = 4.5f;
+            light.intensity = 1.2f;
+
+            var station = root.AddComponent<Forge>();
+            station.EditorSetup("약재상", Forge.Slot.Flask, light);
+            EditorUtility.SetDirty(station);
         }
 
         /// <summary>방어구 작업대: 탁자 + 갑옷 걸이. 방어구를 강화한다.</summary>
@@ -699,6 +746,17 @@ namespace SoulsHunter.EditorTools
                 Step(0.12f, (wMembrane, 2), (wScale, 4), (wCore, 1)),
             });
             EditorUtility.SetDirty(armor);
+
+            // 회복약 주머니: 최대 횟수 4 → 5 → 6 → 7 (약재상)
+            var flaskUpgrade = player.GetComponent<PlayerFlaskUpgrade>();
+            if (!flaskUpgrade) flaskUpgrade = player.AddComponent<PlayerFlaskUpgrade>();
+            flaskUpgrade.EditorSetup("회복약 주머니", new List<UpgradableEquipment.UpgradeStep>
+            {
+                Step(1f, (fur, 4), (tooth, 2)),
+                Step(1f, (hide, 2), (scale, 2), (fang, 1)),
+                Step(1f, (wMembrane, 1), (wScale, 3), (gem, 1)),
+            });
+            EditorUtility.SetDirty(flaskUpgrade);
 
             var save = player.AddComponent<SaveSystem>();
             save.EditorSetup(new List<ItemData> { scale, hide, gem, fang, spike, fur, tooth, wScale, wMembrane, wHorn, wCore });

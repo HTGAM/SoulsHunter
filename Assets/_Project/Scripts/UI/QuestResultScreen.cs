@@ -63,10 +63,15 @@ namespace SoulsHunter.UI
                 sb.Append($"<color=#888888><size=18>S 랭크 기준: {Format(r.quest.parTime)} 안에, 한 번도 쓰러지지 않고</size></color>\n");
             }
 
-            sb.Append("\n<b>얻은 아이템</b>\n");
+            sb.Append(r.firstClear ? "\n<b>얻은 아이템</b>  <color=#FFD27A>(첫 클리어 보너스 포함)</color>\n" : "\n<b>얻은 아이템</b>\n");
             if (r.items.Count == 0) sb.Append("<color=#888888>없음</color>");
             foreach (var (item, amount) in r.items)
                 sb.Append($"<color=#{ColorUtility.ToHtmlStringRGB(item.RarityColor)}>{item.DisplayName}</color>  x{amount}\n");
+            if (r.unlocked.Count > 0)
+            {
+                sb.Append("\n<b><color=#FFD27A>새 퀘스트 해금</color></b>\n");
+                foreach (var q in r.unlocked) sb.Append($"{q.title}\n");
+            }
 
             bodyText.text = sb.ToString();
             showAt = Time.unscaledTime + showDelay;

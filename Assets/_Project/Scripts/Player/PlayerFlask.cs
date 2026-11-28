@@ -26,12 +26,13 @@ namespace SoulsHunter.Player
         PlayerLocomotion locomotion;
         PlayerInputHandler input;
         PlayerCombat combat;
+        PlayerFlaskUpgrade upgrade;
         Health health;
         float timer;
         bool healed;
 
         public int Charges { get; private set; }
-        public int MaxCharges => maxCharges;
+        public int MaxCharges => maxCharges + (upgrade ? upgrade.ExtraCharges : 0);
         public bool IsDrinking { get; private set; }
 
         /// <summary>(남은 횟수, 최대)</summary>
@@ -44,8 +45,9 @@ namespace SoulsHunter.Player
             locomotion = GetComponent<PlayerLocomotion>();
             input = GetComponent<PlayerInputHandler>();
             combat = GetComponent<PlayerCombat>();
+            upgrade = GetComponent<PlayerFlaskUpgrade>();
             health = GetComponent<Health>();
-            Charges = maxCharges;
+            Charges = MaxCharges;
 
             var damage = GetComponent<PlayerDamageHandler>();
             if (damage) damage.Respawned += Refill;
@@ -67,7 +69,7 @@ namespace SoulsHunter.Player
             if (combat && combat.IsAttacking) return;
 
             Charges--;
-            ChargesChanged?.Invoke(Charges, maxCharges);
+            ChargesChanged?.Invoke(Charges, MaxCharges);
             IsDrinking = true;
             healed = false;
             timer = 0f;
@@ -94,9 +96,9 @@ namespace SoulsHunter.Player
 
         public void Refill()
         {
-            Charges = maxCharges;
+            Charges = MaxCharges;
             IsDrinking = false;
-            ChargesChanged?.Invoke(Charges, maxCharges);
+            ChargesChanged?.Invoke(Charges, MaxCharges);
         }
     }
 }

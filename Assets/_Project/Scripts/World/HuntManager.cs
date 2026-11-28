@@ -39,6 +39,10 @@ namespace SoulsHunter.World
         [Tooltip("이 시간(초) 안에 한 번도 안 쓰러지고 깨면 S 랭크")]
         public float parTime = 300f;
         public List<MonsterRewards.Reward> rewards = new();
+        [Tooltip("처음 깼을 때만 추가로 주는 보상")]
+        public List<MonsterRewards.Reward> firstClearRewards = new();
+        [Tooltip("이 퀘스트들(id)을 모두 깨야 게시판에 나타난다")]
+        public List<string> requires = new();
 
         public int TotalEnemies
         {
@@ -71,6 +75,10 @@ namespace SoulsHunter.World
         /// <summary>S / A / B (실패면 빈 문자열)</summary>
         public string rank = "";
         public bool newRecord;
+        /// <summary>처음 깼을 때 (첫 클리어 보상 지급)</summary>
+        public bool firstClear;
+        /// <summary>이번 클리어로 새로 열린 퀘스트</summary>
+        public readonly List<HuntQuest> unlocked = new();
         /// <summary>이번 사냥에서 얻은 아이템 (갈무리·부위 파괴·퀘스트 보상 모두)</summary>
         public readonly List<(ItemData item, int amount)> items = new();
     }
@@ -111,6 +119,39 @@ namespace SoulsHunter.World
         public float ReturnIn => CurrentPhase == Phase.Returning ? Mathf.Max(0f, returnAt - Time.time) : 0f;
         public IReadOnlyCollection<string> ClearedIds => cleared;
         public bool IsCleared(HuntQuest q) => q != null && cleared.Contains(q.id);
+
+        /// <summary>선행 퀘스트를 모두 깨서 받을 수 있는가</summary>
+        public bool IsUnlocked(HuntQuest q)
+        {
+            if (q == null) return false;
+            foreach (var id in q.requires)
+                if (!string.IsNullOrEmpty(id) && !cleared.Contains(id)) return false;
+            return true;
+        }
+
+        /// <summary>아직 잠긴 퀘스트 수</summary>
+        public int LockedCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (var q in quests) if (!IsUnlocked(q)) n++;
+                return n;
+            }
+        }
+
+        /// <summary>선행 퀘스트 이름 중 아직 안 깬 것 (게시판 안내용)</summary>
+        public string MissingRequirements(HuntQuest q)
+        {
+            var names = new List<string>();
+            foreach (var id in q.requires)
+            {
+                if (string.IsNullOrEmpty(id) || cleared.Contains(id)) continue;
+                var req = quests.Find(x => x.id == id);
+                names.Add(req != null ? req.title : id);
+            }
+            return string.Join(", ", names);
+        }
 
         /// <summary>(퀘스트) 게시판에서 받았을 때</summary>
         public static event Action<HuntQuest> QuestAccepted;
@@ -190,7 +231,7 @@ namespace SoulsHunter.World
         /// <summary>퀘스트 받기 (안전구역에서만)</summary>
         public void Accept(HuntQuest quest)
         {
-            if (CurrentPhase != Phase.Idle || quest == null) return;
+            if (CurrentPhase != Phase.Idle || quest == null || !IsUnlocked(quest)) return;
             Accepted = quest;
             QuestAccepted?.Invoke(quest);
         }
@@ -291,10 +332,20 @@ namespace SoulsHunter.World
         void Complete()
         {
             endTime = Time.time;
-            cleared.Add(Active.id);
-            GiveRewards(Active);
+            var lockedBefore = new List<HuntQuest>();
+            foreach (var q in quests) if (!IsUnlocked(q)) lockedBefore.Add(q);
+            bool firstClear = cleared.Add(Active.id);
+            GiveRewards(Active.rewards);
+            if (firstClear) GiveRewards(Active.firstClearRewards);
 
             var result = MakeResult(true);
+            result.firstClear = firstClear;
+            foreach (var q in lockedBefore)
+                if (IsUnlocked(q))
+                {
+                    result.unlocked.Add(q);
+                    GameEvents.Notify($"<color=#FFD27A>새 퀘스트가 열렸어요: {q.title}</color>");
+                }
             result.rank = RankFor(Active, result.time, Faints);
             if (!records.TryGetValue(Active.id, out var rec)) records[Active.id] = rec = new QuestRecord { id = Active.id };
             rec.clears++;
@@ -382,10 +433,10 @@ namespace SoulsHunter.World
             flow = StartCoroutine(routine);
         }
 
-        void GiveRewards(HuntQuest quest)
+        void GiveRewards(List<MonsterRewards.Reward> rewards)
         {
-            if (!inventory) return;
-            foreach (var r in quest.rewards)
+            if (!inventory || rewards == null) return;
+            foreach (var r in rewards)
             {
                 if (!r.item || UnityEngine.Random.value > r.chance) continue;
                 inventory.Add(r.item, UnityEngine.Random.Range(r.min, Mathf.Max(r.min, r.max) + 1));

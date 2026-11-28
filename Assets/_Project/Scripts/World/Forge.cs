@@ -12,7 +12,7 @@ namespace SoulsHunter.World
     /// </summary>
     public class Forge : Interactable
     {
-        public enum Slot { Weapon, Armor }
+        public enum Slot { Weapon, Armor, Flask }
 
         [SerializeField] string forgeName = "대장간";
         [SerializeField] Slot slot = Slot.Weapon;
@@ -33,8 +33,8 @@ namespace SoulsHunter.World
             get
             {
                 if (!equipment) return forgeName;
-                if (equipment.IsMaxed) return $"{equipment.DisplayName}  <color=#AAAAAA>(최대 강화)</color>";
-                return $"{equipment.SlotName} 강화  +{equipment.Level} → +{equipment.Level + 1}\n" +
+                if (equipment.IsMaxed) return $"{equipment.DisplayName}  <color=#AAAAAA>(최대 강화 · {equipment.StatSummary})</color>";
+                return $"{equipment.SlotName} 강화  +{equipment.Level} → +{equipment.Level + 1}  <color=#AAAAAA>(지금: {equipment.StatSummary})</color>\n" +
                        $"<size=20>{equipment.DescribeNextCost(inventory)}</size>";
             }
         }
@@ -58,9 +58,12 @@ namespace SoulsHunter.World
             if (cachedPlayer != player)
             {
                 cachedPlayer = player;
-                equipment = slot == Slot.Weapon
-                    ? player.GetComponent<PlayerWeapon>()
-                    : player.GetComponent<PlayerArmor>();
+                equipment = slot switch
+                {
+                    Slot.Weapon => player.GetComponent<PlayerWeapon>(),
+                    Slot.Armor => player.GetComponent<PlayerArmor>(),
+                    _ => player.GetComponent<PlayerFlaskUpgrade>(),
+                };
                 inventory = player.GetComponent<PlayerInventory>();
             }
             return equipment;
@@ -72,7 +75,7 @@ namespace SoulsHunter.World
 
             if (equipment.IsMaxed)
             {
-                GameEvents.Notify($"이미 최대로 강화한 {equipment.SlotName}예요.");
+                GameEvents.Notify($"{equipment.SlotName}은(는) 이미 최대로 강화했어요.");
                 return;
             }
             if (!equipment.TryUpgrade(inventory))

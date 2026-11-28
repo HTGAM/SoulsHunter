@@ -20,11 +20,34 @@ namespace SoulsHunter.World
             get
             {
                 var m = Manager;
-                if (!m || m.Quests.Count == 0) return "<color=#AAAAAA>받을 수 있는 퀘스트가 없어요</color>";
-                var next = m.Quests[nextIndex % m.Quests.Count];
+                var next = m ? NextUnlocked(m) : null;
+                if (next == null) return "<color=#AAAAAA>받을 수 있는 퀘스트가 없어요</color>";
                 string verb = m.Accepted == null ? "퀘스트 받기" : "퀘스트 바꾸기";
-                return $"{verb}: <b>{next.title}</b>{ClearMark(m, next)}\n<size=20>{Summary(next)}{Best(m, next)}</size>";
+                return $"{verb}: <b>{next.title}</b>{ClearMark(m, next)}\n<size=20>{Summary(next)}{Best(m, next)}{LockedHint(m)}</size>";
             }
+        }
+
+        /// <summary>nextIndex부터 돌면서 처음 만나는 열린 퀘스트 (nextIndex도 그 자리로 옮긴다)</summary>
+        HuntQuest NextUnlocked(HuntManager m)
+        {
+            int n = m.Quests.Count;
+            for (int i = 0; i < n; i++)
+            {
+                int idx = (nextIndex + i) % n;
+                if (m.IsUnlocked(m.Quests[idx])) { nextIndex = idx; return m.Quests[idx]; }
+            }
+            return null;
+        }
+
+        /// <summary>다음으로 열릴 퀘스트 안내</summary>
+        static string LockedHint(HuntManager m)
+        {
+            foreach (var q in m.Quests)
+            {
+                if (m.IsUnlocked(q)) continue;
+                return $"\n<color=#888888>잠긴 퀘스트 {m.LockedCount}개 · 다음: '{q.title}' — {m.MissingRequirements(q)} 클리어 필요</color>";
+            }
+            return "";
         }
 
         public override bool CanInteract(GameObject player) =>
@@ -36,14 +59,41 @@ namespace SoulsHunter.World
             var m = Manager;
             if (!m) return;
             for (int i = 0; i < m.Quests.Count; i++)
-                if (!m.IsCleared(m.Quests[i])) { nextIndex = i; return; }
+                if (m.IsUnlocked(m.Quests[i]) && !m.IsCleared(m.Quests[i])) { nextIndex = i; return; }
+        }
+
+        protected override void OnEnable()
+        {
+            base.OnEnable();
+            HuntManager.QuestEnded += OnQuestEnded;
+        }
+
+        protected override void OnDisable()
+        {
+            base.OnDisable();
+            HuntManager.QuestEnded -= OnQuestEnded;
+        }
+
+        // 새로 열린 퀘스트가 있으면 게시판이 그걸 먼저 보여준다
+        void OnQuestEnded(HuntResult r)
+        {
+            var m = Manager;
+            if (!m || r.unlocked.Count == 0) return;
+            int idx = IndexOf(m, r.unlocked[0]);
+            if (idx >= 0) nextIndex = idx;
+        }
+
+        static int IndexOf(HuntManager m, HuntQuest q)
+        {
+            for (int i = 0; i < m.Quests.Count; i++) if (m.Quests[i] == q) return i;
+            return -1;
         }
 
         public override void Interact(GameObject player)
         {
             var m = Manager;
-            if (!m || m.Quests.Count == 0) return;
-            var quest = m.Quests[nextIndex % m.Quests.Count];
+            var quest = m ? NextUnlocked(m) : null;
+            if (quest == null) return;
             m.Accept(quest);
             nextIndex = (nextIndex + 1) % m.Quests.Count;
             GameEvents.Notify($"퀘스트를 받았어요: <color=#FFD27A>{quest.title}</color>  — 출발 관문으로 가세요.");

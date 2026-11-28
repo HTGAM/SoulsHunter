@@ -214,7 +214,9 @@ namespace SoulsHunter.Player
             ownHealth = GetComponent<Health>();
             flask = GetComponent<PlayerFlask>();
             weapon = GetComponent<PlayerWeapon>();
-            if (ownHealth) ownHealth.InvulnerabilityCheck = () => locomotion.IsInvulnerable;
+            var damageHandler = GetComponent<PlayerDamageHandler>();
+            if (ownHealth) ownHealth.InvulnerabilityCheck = () =>
+                locomotion.IsInvulnerable || (damageHandler && damageHandler.IsHitInvulnerable);
 
             locomotion.Dodged += _ => EndAttack(); // 구르기는 공격을 캔슬한다
             if (weapon) weapon.WeaponChanged += _ => { EndAttack(); comboIndex = -1; };

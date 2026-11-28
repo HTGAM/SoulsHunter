@@ -15,6 +15,12 @@ namespace SoulsHunter.Player
         [Header("Hit")]
         [SerializeField] float knockbackDistance = 0.4f;
         [SerializeField] float knockbackDuration = 0.15f;
+        [Tooltip("맞은 뒤 잠깐 무적 (연속 판정·겹친 공격에 한 번에 녹지 않게)")]
+        [SerializeField] float hitInvulnerability = 0.45f;
+        [Tooltip("강인도가 깨져 경직됐을 때의 무적 (경직이 끝나고 조금 더)")]
+        [SerializeField] float staggerInvulnerability = 0.9f;
+        [Tooltip("부활 직후 무적")]
+        [SerializeField] float respawnInvulnerability = 1.5f;
 
         [Header("Stagger (강인도 붕괴)")]
         [SerializeField] float staggerDuration = 0.6f;
@@ -31,6 +37,13 @@ namespace SoulsHunter.Player
         Vector3 startPosition;
         Quaternion startRotation;
         Coroutine knockback;
+        float invulnerableUntil = float.NegativeInfinity;
+
+        /// <summary>피격·경직·부활 직후의 짧은 무적 중인가</summary>
+        public bool IsHitInvulnerable => Time.time < invulnerableUntil;
+
+        void GrantInvulnerability(float seconds) =>
+            invulnerableUntil = Mathf.Max(invulnerableUntil, Time.time + seconds);
 
         public event Action Respawned;
 
@@ -54,6 +67,7 @@ namespace SoulsHunter.Player
         void OnDamaged(DamageInfo info)
         {
             if (health.IsDead) return;
+            GrantInvulnerability(hitInvulnerability);
             Push(info.Direction, knockbackDistance, knockbackDuration);
             locomotion.Animator.TrySetTrigger(HitHash);
         }
@@ -61,6 +75,7 @@ namespace SoulsHunter.Player
         void OnStaggered(DamageInfo info)
         {
             if (health.IsDead) return;
+            GrantInvulnerability(staggerInvulnerability);
             locomotion.Stun(staggerDuration);
             Push(info.Direction, staggerKnockback, staggerDuration * 0.5f);
             locomotion.Animator.TrySetTrigger(StaggerHash);
@@ -82,6 +97,8 @@ namespace SoulsHunter.Player
             locomotion.Teleport(pos, rot);
             locomotion.ClearStun();
             health.ResetHealth();
+            invulnerableUntil = float.NegativeInfinity;
+            GrantInvulnerability(respawnInvulnerability);
             if (stamina) stamina.Refill();
             locomotion.Animator.TrySetBool(DeadHash, false);
             // 소울류: 죽으면 적들도 부활. 단, 사냥 퀘스트 중에는 몬스터가 그대로 남는다 (몬헌식)

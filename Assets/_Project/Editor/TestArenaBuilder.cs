@@ -785,7 +785,13 @@ namespace SoulsHunter.EditorTools
             // 무기는 한손검 하나만 사용 (다른 무기 에셋은 남겨둠)
             var sword = WeaponPresets.GetOrCreateAll()[0];
             // 마을 팩이 있으면 진짜 검·방패 모델을 쓴다
-            if (EnvironmentBuilder.V("Sword")) { sword.rightModel = EnvironmentBuilder.V("Sword"); sword.leftModel = EnvironmentBuilder.V("Shield"); EditorUtility.SetDirty(sword); }
+            if (EnvironmentBuilder.V("Sword"))
+            {
+                sword.rightModel = EnvironmentBuilder.HeldWeapon(EnvironmentBuilder.V("Sword"), "HeldSword");
+                sword.rightModelAtGrip = sword.rightModel;
+                sword.leftModel = EnvironmentBuilder.V("Shield");
+                EditorUtility.SetDirty(sword);
+            }
             weapon.EditorSetupWeapons(new List<WeaponData> { sword }, sword);
             EditorUtility.SetDirty(weapon);
             player.AddComponent<PlayerWeaponSpecial>();

@@ -67,7 +67,42 @@ namespace SoulsHunter.EditorTools
             if (!grass) grass = AssetDatabase.LoadAssetAtPath<TerrainLayer>(UNS + "Terrain/Layers/UNS_Grass.terrainlayer");
             if (!dirt) dirt = AssetDatabase.LoadAssetAtPath<TerrainLayer>(UNS + "Terrain/Layers/UNS_Dirt.terrainlayer");
             if (!rock) rock = dirt;
-            return grass && dirt ? new[] { grass, dirt, rock } : null;
+            if (!grass || !dirt) return null;
+            // 원본 레이어는 그대로 두고, 타일을 촘촘히·색을 차분하게 한 복사본을 쓴다
+            return new[]
+            {
+                TunedLayer(grass, "FieldGrass", 3.5f, new Color(0.82f, 0.86f, 0.78f), 0.6f),
+                TunedLayer(dirt, "FieldDirt", 3f, new Color(0.72f, 0.66f, 0.6f), 0.8f),
+                TunedLayer(rock, "FieldRock", 5f, new Color(0.62f, 0.62f, 0.6f), 1f),
+            };
+        }
+
+        static TerrainLayer TunedLayer(TerrainLayer source, string name, float tile, Color tint, float normalScale)
+        {
+            if (!AssetDatabase.IsValidFolder(DataFolder)) AssetDatabase.CreateFolder("Assets/_Project/Data", "Environment");
+            string path = $"{DataFolder}/{name}.terrainlayer";
+            var layer = AssetDatabase.LoadAssetAtPath<TerrainLayer>(path);
+            if (!layer)
+            {
+                layer = new TerrainLayer();
+                AssetDatabase.CreateAsset(layer, path);
+            }
+            layer.diffuseTexture = source.diffuseTexture;
+            layer.normalMapTexture = source.normalMapTexture;
+            layer.tileSize = new Vector2(tile, tile);
+            layer.normalScale = normalScale;
+            layer.diffuseRemapMax = new Vector4(tint.r, tint.g, tint.b, 1f);
+            layer.smoothness = 0.05f;
+            layer.metallic = 0f;
+            EditorUtility.SetDirty(layer);
+            // 비스듬히 봐도 흐려지지 않게
+            foreach (var tex in new Texture[] { source.diffuseTexture, source.normalMapTexture })
+            {
+                if (!tex || AssetImporter.GetAtPath(AssetDatabase.GetAssetPath(tex)) is not TextureImporter ti || ti.anisoLevel >= 8) continue;
+                ti.anisoLevel = 8;
+                ti.SaveAndReimport();
+            }
+            return layer;
         }
 
         static Texture2D GrassTex(int i) => AssetDatabase.LoadAssetAtPath<Texture2D>(TerrainTex + (i == 0 ? "Brush_Grass_01.png" : i == 1 ? "Brush_Grass_02.png" : "Brush_Flower.png"));
@@ -105,7 +140,7 @@ namespace SoulsHunter.EditorTools
             float Height(float x, float z)
             {
                 float n = Fbm(x * 0.018f + 31f, z * 0.018f + 17f);
-                float h = 7f + n * 11f;
+                float h = 6f + n * 7f;
                 float edge = Mathf.Max(Mathf.Abs(x), Mathf.Abs(z));
                 if (edge > 86f) h += Mathf.Min(42f, (edge - 86f) * (edge - 86f) * 0.09f);
 
@@ -113,7 +148,7 @@ namespace SoulsHunter.EditorTools
                 foreach (var (a, b) in FieldPaths)
                 {
                     float d = DistToSegment(new Vector2(x, z), a.c, b.c, out float t);
-                    float w = Smooth(8f, 3.5f, d);
+                    float w = Smooth(18f, 4f, d); // 넓고 완만하게 (깊은 도랑이 되지 않게)
                     if (w > 0f) h = Mathf.Lerp(h, Mathf.Lerp(a.floor, b.floor, t) + n * 1.2f, w);
                 }
 
@@ -172,7 +207,7 @@ namespace SoulsHunter.EditorTools
             {
                 var p = RandomPoint(rng, 105f);
                 if (!Clear(p, 1f)) continue;
-                Place(Pick(ForestRocks, rng), props, G(p) - Vector3.up * 0.3f, Rand(rng, 0f, 360f), Rand(rng, 0.8f, 1.8f));
+                FitSize(Place(Pick(RockSets, rng), props, G(p) - Vector3.up * 0.3f, Rand(rng, 0f, 360f), 1f), Rand(rng, 1.5f, 4.5f));
             }
             for (int i = 0; i < 60; i++)
             {
@@ -187,7 +222,7 @@ namespace SoulsHunter.EditorTools
                     float t = Rand(rng, 0.1f, 0.9f);
                     var along = Vector2.Lerp(a.c, b.c, t);
                     var side = new Vector2(-(b.c - a.c).y, (b.c - a.c).x).normalized * (rng.Next(2) == 0 ? -1f : 1f) * Rand(rng, 4.5f, 6.5f);
-                    Place(Pick(TinyRocks, rng), props, G(along + side), Rand(rng, 0f, 360f), Rand(rng, 0.8f, 1.6f));
+                    FitSize(Place(Pick(RockSets, rng), props, G(along + side) - Vector3.up * 0.1f, Rand(rng, 0f, 360f), 1f), Rand(rng, 0.5f, 1.1f));
                 }
 
             // 베이스캠프: 수레·통·탁자·모닥불
@@ -222,7 +257,7 @@ namespace SoulsHunter.EditorTools
             for (int i = 0; i < 3; i++)
             {
                 var p = Gorge.c + (Vector2)(Quaternion.Euler(0f, 0f, i * 120f + 30f) * Vector2.up) * 10f;
-                Place(Pick(RockSets, rng), props, G(p) - Vector3.up * 0.4f, Rand(rng, 0f, 360f), 1f);
+                FitSize(Place(Pick(RockSets, rng), props, G(p) - Vector3.up * 0.4f, Rand(rng, 0f, 360f), 1f), Rand(rng, 3.5f, 5f));
             }
 
             // 잿불 분지: 낮은 바위 테두리 + 검은 바위 + 불씨
@@ -230,7 +265,7 @@ namespace SoulsHunter.EditorTools
             for (int i = 0; i < 4; i++)
             {
                 var p = Basin.c + (Vector2)(Quaternion.Euler(0f, 0f, i * 90f + 45f) * Vector2.up) * Rand(rng, 12f, 17f);
-                Place(Pick(RockSets, rng), props, G(p) - Vector3.up * 0.4f, Rand(rng, 0f, 360f), 1.2f);
+                FitSize(Place(Pick(RockSets, rng), props, G(p) - Vector3.up * 0.4f, Rand(rng, 0f, 360f), 1f), Rand(rng, 4f, 6f));
             }
             Embers(props, Basin, G, rng);
 
@@ -249,15 +284,15 @@ namespace SoulsHunter.EditorTools
             root.AddComponent<BakeNavMeshOnAwake>();
 
             var atmo = root.AddComponent<AreaAtmosphere>();
-            atmo.EditorSetup("잿빛 숲", 260f, Sky("Panoramics/FS013/FS013_Day.mat"), new Color(0.62f, 0.68f, 0.72f), 50f, 260f,
-                             new Color(0.5f, 0.55f, 0.6f), new Vector2(38f, -40f), new Color(1f, 0.93f, 0.82f), 1.25f);
+            atmo.EditorSetup("잿빛 숲", 260f, Sky("Panoramics/FS013/FS013_Day.mat"), new Color(0.68f, 0.7f, 0.7f), 60f, 280f,
+                             new Color(0.55f, 0.56f, 0.54f), new Vector2(42f, -40f), new Color(1f, 0.95f, 0.88f), 1.35f);
 
             return new FieldLayout { campSpawn = spawn, glade = G(Glade.c), gorge = G(Gorge.c), basin = G(Basin.c) };
         }
 
         static void RingOfCliffs(Zone zn, Transform parent, System.Func<Vector2, Vector3> ground, System.Random rng, int count, float scale = 1f)
         {
-            var cliffs = Cliffs;
+            var cliffs = RockSets.Length > 0 ? RockSets : Cliffs; // 사실풍 바위(PBR)를 우선 쓴다
             if (cliffs.Length == 0) return;
             for (int i = 0; i < count; i++)
             {
@@ -439,9 +474,59 @@ namespace SoulsHunter.EditorTools
             return true;
         }
 
+        // ───────── 손에 쥐는 무기 ─────────
+
+        /// <summary>
+        /// 검 모델을 "손잡이 = 원점, 칼끝 = +Z, 길이 1"인 프리팹으로 감싸 저장한다 (PlayerWeaponLoadout이 손에 그대로 쥔다).
+        /// 손잡이 쪽은 정점이 몰려 있는 쪽(코등이·손잡이·폼멜)으로 판단한다.
+        /// </summary>
+        public static GameObject HeldWeapon(GameObject prefab, string name)
+        {
+            if (!prefab) return null;
+            if (!AssetDatabase.IsValidFolder(DataFolder)) AssetDatabase.CreateFolder("Assets/_Project/Data", "Environment");
+
+            var temp = (GameObject)PrefabUtility.InstantiatePrefab(prefab);
+            temp.transform.SetPositionAndRotation(Vector3.zero, prefab.transform.rotation);
+            var verts = new List<Vector3>();
+            foreach (var mf in temp.GetComponentsInChildren<MeshFilter>())
+            {
+                if (!mf.sharedMesh) continue;
+                var m = mf.transform.localToWorldMatrix;
+                foreach (var v in mf.sharedMesh.vertices) verts.Add(m.MultiplyPoint3x4(v));
+            }
+            if (verts.Count == 0) { Object.DestroyImmediate(temp); return null; }
+
+            Vector3 min = verts[0], max = verts[0], mean = Vector3.zero;
+            foreach (var v in verts) { min = Vector3.Min(min, v); max = Vector3.Max(max, v); mean += v; }
+            mean /= verts.Count;
+            var size = max - min;
+            int axis = size.x >= size.y && size.x >= size.z ? 0 : size.y >= size.z ? 1 : 2;
+            float length = size[axis];
+            float mid = (min[axis] + max[axis]) * 0.5f;
+            bool handleAtMax = mean[axis] > mid;
+            var bladeDir = Vector3.zero;
+            bladeDir[axis] = handleAtMax ? -1f : 1f;
+            var grip = (min + max) * 0.5f;
+            grip[axis] = handleAtMax ? max[axis] - length * 0.11f : min[axis] + length * 0.11f;
+
+            var root = new GameObject(name);
+            temp.transform.SetParent(root.transform, true);
+            var rot = Quaternion.FromToRotation(bladeDir, Vector3.forward);
+            float s = 1f / length;
+            temp.transform.localRotation = rot * prefab.transform.rotation;
+            temp.transform.localScale = prefab.transform.localScale * s;
+            temp.transform.localPosition = -(rot * grip) * s;
+            foreach (var c in root.GetComponentsInChildren<Collider>()) Object.DestroyImmediate(c);
+
+            string path = $"{DataFolder}/{name}.prefab";
+            var saved = PrefabUtility.SaveAsPrefabAsset(root, path);
+            Object.DestroyImmediate(root);
+            return saved;
+        }
+
         // ───────── 화면 효과 ─────────
 
-        const string PostFxPath = DataFolder + "/GamePostFX.asset";
+        const string PostFxPath = DataFolder + "/PostFX.asset";
 
         /// <summary>
         /// 전체 화면 효과: 톤매핑(ACES)·블룸·색 보정·비네트 + 카메라 후처리와 SMAA 안티앨리어싱.
@@ -461,20 +546,16 @@ namespace SoulsHunter.EditorTools
 
                 var bloom = profile.Add<Bloom>(true);
                 bloom.threshold.Override(1.05f);
-                bloom.intensity.Override(0.55f);
+                bloom.intensity.Override(0.35f);
                 bloom.scatter.Override(0.65f);
 
                 var color = profile.Add<ColorAdjustments>(true);
-                color.postExposure.Override(0.25f);
-                color.contrast.Override(14f);
-                color.saturation.Override(6f);
-
-                var lift = profile.Add<LiftGammaGain>(true);
-                lift.lift.Override(new Vector4(1f, 0.99f, 1.02f, -0.02f));
-                lift.gain.Override(new Vector4(1.02f, 1f, 0.97f, 0f));
+                color.postExposure.Override(0.05f);
+                color.contrast.Override(8f);
+                color.saturation.Override(-6f);
 
                 var vignette = profile.Add<Vignette>(true);
-                vignette.intensity.Override(0.25f);
+                vignette.intensity.Override(0.2f);
                 vignette.smoothness.Override(0.4f);
 
                 foreach (var c in profile.components) AssetDatabase.AddObjectToAsset(c, profile);
@@ -607,7 +688,7 @@ namespace SoulsHunter.EditorTools
                     float nx = xi / (float)(res - 1), nz = zi / (float)(res - 1);
                     float x = -size * 0.5f + nx * size, z = -size * 0.5f + nz * size;
                     float slope = td.GetSteepness(nx, nz);
-                    float rock = Smooth(28f, 42f, slope);
+                    float rock = Smooth(33f, 48f, slope);
                     float dirt = Mathf.Clamp01(dirtAt(x, z) + (Mathf.PerlinNoise(x * 0.15f, z * 0.15f) - 0.5f) * 0.25f) * (1f - rock);
                     float grass = Mathf.Max(0f, 1f - rock - dirt);
                     map[zi, xi, 0] = grass;

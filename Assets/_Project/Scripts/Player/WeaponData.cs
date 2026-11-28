@@ -77,6 +77,8 @@ namespace SoulsHunter.Player
         public List<VisualPart> visuals = new();
         [Tooltip("오른손 무기 모델 (있으면 도형 대신 이 모델을 오른쪽 부품 자리에 맞춰 넣는다)")]
         public GameObject rightModel;
+        [Tooltip("켜면 오른손 모델의 원점(0,0,0)이 손잡이, +Z가 칼끝 방향인 모델로 보고 손에 그대로 쥐여 준다")]
+        public bool rightModelAtGrip;
         [Tooltip("왼손 모델 (방패 등). 왼쪽 부품 자리에 맞춰 넣는다")]
         public GameObject leftModel;
 

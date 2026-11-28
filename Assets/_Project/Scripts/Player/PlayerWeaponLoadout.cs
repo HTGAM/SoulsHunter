@@ -102,7 +102,11 @@ namespace SoulsHunter.Player
                 }
             }
             // 진짜 모델이 있으면 도형은 숨기고(칼날 궤적용 위치는 유지) 모델을 그 자리에 맞춰 넣는다
-            if (w && w.rightModel) ReplaceWithModel(modelRoot, w.rightModel);
+            if (w && w.rightModel)
+            {
+                if (w.rightModelAtGrip) HoldAtGrip(modelRoot, w.rightModel);
+                else ReplaceWithModel(modelRoot, w.rightModel);
+            }
             if (w && w.leftModel && leftRoot) ReplaceWithModel(leftRoot, w.leftModel);
 
             // 손에 붙은 방패는 가드 애니메이션이 들어 올리므로 코드로 움직이지 않는다
@@ -140,6 +144,31 @@ namespace SoulsHunter.Player
             model.transform.localRotation = rot;
             model.transform.localScale = Vector3.one * scale;
             model.transform.localPosition = box.center - rot * (mb.center * scale);
+        }
+
+        /// <summary>
+        /// 손잡이가 원점, 칼끝이 +Z(길이 1)인 모델을 손 위치(원점)에 쥐여 준다.
+        /// 칼날 방향과 길이는 도형 부품(칼날)에서 가져온다.
+        /// </summary>
+        void HoldAtGrip(Transform root, GameObject prefab)
+        {
+            var parts = new List<Renderer>(root.GetComponentsInChildren<Renderer>());
+            if (parts.Count == 0) return;
+            var box = LocalBounds(root, parts);
+            foreach (var r in parts) r.enabled = false;
+
+            int axis = SortAxes(box.size)[0];
+            float sign = box.center[axis] >= 0f ? 1f : -1f;
+            Vector3 dir = Axis(axis) * sign;
+            float reach = Mathf.Max(Mathf.Abs(box.min[axis]), Mathf.Abs(box.max[axis]));
+
+            var model = Instantiate(prefab, root);
+            model.name = "Weapon Mesh";
+            foreach (var c in model.GetComponentsInChildren<Collider>()) Destroy(c);
+            model.transform.localPosition = Vector3.zero;
+            model.transform.localRotation = Quaternion.FromToRotation(Vector3.forward, dir);
+            // 손잡이 부분(전체의 약 11%)을 빼고 칼날이 도형 칼날 끝까지 닿게
+            model.transform.localScale = Vector3.one * (reach / 0.89f);
         }
 
         static Vector3 Axis(int i) => i == 0 ? Vector3.right : i == 1 ? Vector3.up : Vector3.forward;

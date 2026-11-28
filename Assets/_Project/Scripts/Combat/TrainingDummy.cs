@@ -22,6 +22,7 @@ namespace SoulsHunter.Combat
 
         Health health;
         Renderer[] renderers;
+        bool[] shownByDefault; // 처음에 켜져 있던 렌더러 (숨겨 둔 판정용 도형은 부활해도 다시 켜지 않는다)
         Collider[] colliders;
         Hurtbox[] hurtboxes;
         LockOnTarget lockOn;
@@ -32,6 +33,8 @@ namespace SoulsHunter.Combat
         {
             health = GetComponent<Health>();
             renderers = GetComponentsInChildren<Renderer>();
+            shownByDefault = new bool[renderers.Length];
+            for (int i = 0; i < renderers.Length; i++) shownByDefault[i] = renderers[i].enabled;
             colliders = GetComponentsInChildren<Collider>();
             hurtboxes = GetComponentsInChildren<Hurtbox>();
             lockOn = GetComponent<LockOnTarget>();
@@ -123,7 +126,7 @@ namespace SoulsHunter.Combat
 
         void SetVisible(bool visible)
         {
-            foreach (var r in renderers) r.enabled = visible;
+            for (int i = 0; i < renderers.Length; i++) renderers[i].enabled = visible && shownByDefault[i];
             foreach (var c in colliders) c.enabled = visible;
         }
     }

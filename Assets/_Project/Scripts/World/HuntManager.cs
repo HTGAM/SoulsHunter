@@ -32,6 +32,10 @@ namespace SoulsHunter.World
         [TextArea] public string description = "";
         [Tooltip("투기장 이름 (표시용)")]
         public string arenaName = "투기장";
+        [Tooltip("목표 위치 안내 (퀘스트 진행 표시에 나옴). 비우면 표시 안 함")]
+        public string objectiveHint = "";
+        [Tooltip("켜면 웨이브가 시작되자마자 몬스터가 플레이어를 쫓는다 (투기장). 끄면 다가가야 싸움이 시작된다 (사냥터)")]
+        public bool forceAggro = true;
         [Tooltip("출발하면 플레이어가 서는 곳. 쓰러지면 여기서 다시 일어난다.")]
         public Transform arenaSpawn;
         public List<HuntWave> waves = new();
@@ -305,7 +309,7 @@ namespace SoulsHunter.World
                 if (h.TryGetComponent(out EnemyAI ai))
                 {
                     ai.ResetEnemy();
-                    ai.ForceAggro();
+                    if (Active.forceAggro) ai.ForceAggro();
                 }
                 else if (h.TryGetComponent(out TrainingDummy dummy)) dummy.ResetAll();
                 else h.ResetHealth();

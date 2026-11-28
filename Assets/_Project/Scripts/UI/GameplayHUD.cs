@@ -117,6 +117,8 @@ namespace SoulsHunter.UI
                 var q = m.Active;
                 string faintColor = m.Faints >= HuntManager.FaintLimit(q) - 1 && m.Faints > 0 ? "FF6A5A" : "FFFFFF";
                 var sb = new StringBuilder($"<b>{q.title}</b>\n<size=20>");
+                if (!string.IsNullOrEmpty(q.objectiveHint) && m.CurrentPhase == HuntManager.Phase.Hunting)
+                    sb.Append($"<color=#FFD27A>목표: {q.objectiveHint}</color>\n");
                 if (m.CurrentPhase == HuntManager.Phase.Hunting)
                 {
                     int wave = Mathf.Max(0, m.WaveIndex) + 1;

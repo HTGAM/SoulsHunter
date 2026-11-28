@@ -30,7 +30,7 @@ namespace SoulsHunter.EditorTools
         {
             "Arena", "Bonfire", "Dummies",
             "Player", "LockOnMarker", "HUD", "Forge", "Armor Bench", "Quest Board",
-            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack", "Apothecary", "Soul Altar",
+            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack", "Apothecary", "Soul Altar", "Village", "Hunting Field",
         };
 
         static readonly Vector3 HubSpawn = new(0f, 0f, -4f);
@@ -75,8 +75,11 @@ namespace SoulsHunter.EditorTools
             var weakMat = MakeMaterial(new Color(0.95f, 0.45f, 0.2f));
 
             // 환경: 안전구역 + 투기장
-            BuildHub(groundMat, wallMat);
+            // 환경 팩이 있으면 마을과 사냥터를 진짜 에셋으로 만든다
+            if (!EnvironmentBuilder.BuildVillage(Create)) BuildHub(groundMat, wallMat);
             var arenaSpawn = BuildColosseum(wallMat);
+            EnvironmentBuilder.AddColosseumAtmosphere(arenaSpawn.parent.gameObject);
+            var field = EnvironmentBuilder.BuildField(Create);
 
             // 플레이어
             var player = Create("Player");
@@ -151,7 +154,8 @@ namespace SoulsHunter.EditorTools
             Dummy(training.transform, "Dummy B", new Vector3(-12f, 0f, 1f), 1f, 150f, enemyMat);
 
             // 퀘스트와 투기장 몬스터
-            BuildHuntContent(arenaSpawn, enemyMat, weakMat);
+            EnvironmentBuilder.DressHubFacilities();
+            BuildHuntContent(arenaSpawn, field, enemyMat, weakMat);
             // 에셋스토어 몬스터 모델이 있으면 도형 대신 입힌다
             MonsterModelSetup.ApplyToScene(out _);
             // 캐릭터 모델도 다시 입힌다 (Character Setup을 한 번이라도 했으면)
@@ -449,7 +453,7 @@ namespace SoulsHunter.EditorTools
         /// 퀘스트 3개와 각자의 투기장 몬스터, 사냥 관리자.
         /// 몬스터는 퀘스트마다 따로 만든다 (같은 몬스터가 여러 퀘스트에 섞이지 않게).
         /// </summary>
-        static void BuildHuntContent(Transform arenaSpawn, Material enemyMat, Material weakMat)
+        static void BuildHuntContent(Transform arenaSpawn, FieldLayout field, Material enemyMat, Material weakMat)
         {
             var enemies = Create("Arena Enemies");
             var houndMat = MakeMaterial(new Color(0.45f, 0.42f, 0.4f));
@@ -464,14 +468,18 @@ namespace SoulsHunter.EditorTools
             Health Hound(Transform g, string name, float x, float z) => BuildHound(g, name, c + new Vector3(x, 0f, z), houndMat, weakMat);
             Health Boss(Transform g, float x, float z) => BuildBoss(g, c + new Vector3(x, 0f, z), enemyMat, weakMat);
             Health Wyrm(Transform g, float x, float z) => BuildWyrm(g, c + new Vector3(x, 0f, z), weakMat);
+            // 사냥터가 있으면 들개·Ravager·비룡 퀘스트는 사냥터의 각 구역에서 싸운다 (보스 러시는 투기장)
+            Vector3 glade = field != null ? field.glade : c, gorge = field != null ? field.gorge : c, basin = field != null ? field.basin : c;
+            Health FieldHound(Transform g, string name, float x, float z) => BuildHound(g, name, glade + new Vector3(x, 0f, z), houndMat, weakMat);
+            var fieldSpawn = field != null ? field.campSpawn : arenaSpawn;
 
             // 1. 들개 사냥
             var g1 = Group("Q1 Hounds");
-            var q1Wave = new HuntWave { label = "잿빛 들개", enemies = new() { Hound(g1, "Ashen Hound A", -6f, 10f), Hound(g1, "Ashen Hound B", 6f, 10f) } };
+            var q1Wave = new HuntWave { label = "잿빛 들개", enemies = new() { FieldHound(g1, "Ashen Hound A", -6f, 4f), FieldHound(g1, "Ashen Hound B", 6f, 6f) } };
 
             // 2. Ravager 토벌
             var g2 = Group("Q2 Ravager");
-            var q2Wave = new HuntWave { label = "Ravager", enemies = new() { Boss(g2, 0f, 12f) } };
+            var q2Wave = new HuntWave { label = "Ravager", enemies = new() { BuildBoss(g2, gorge + new Vector3(0f, 0f, 4f), enemyMat, weakMat) } };
 
             // 3. 보스 러시: 들개 무리 → Ravager → Ravager + 들개
             var g3 = Group("Q3 Boss Rush");
@@ -481,7 +489,7 @@ namespace SoulsHunter.EditorTools
 
             // 4. 잿불 비룡 토벌 (원거리 보스)
             var g4 = Group("Q4 Cinder Wyrm");
-            var q4Wave = new HuntWave { label = "Cinder Wyrm", enemies = new() { Wyrm(g4, 0f, 14f) } };
+            var q4Wave = new HuntWave { label = "Cinder Wyrm", enemies = new() { BuildWyrm(g4, basin + new Vector3(0f, 0f, 6f), weakMat) } };
 
             var fur = GetOrCreateItem("AshenFur", "잿빛 털", "잿빛 들개의 거친 털. 흔한 소재.", 1);
             var tooth = GetOrCreateItem("HoundFang", "들개 이빨", "날카로운 송곳니. 무기 강화에 쓴다.", 1);
@@ -496,9 +504,10 @@ namespace SoulsHunter.EditorTools
             {
                 new()
                 {
-                    id = "hunt_hounds", title = "잿빛 들개 사냥", arenaName = "투기장", soulReward = 60,
-                    description = "투기장에 풀린 잿빛 들개 두 마리를 사냥하라.",
-                    arenaSpawn = arenaSpawn, waves = new() { q1Wave }, maxFaints = 3, parTime = 90f,
+                    id = "hunt_hounds", title = "잿빛 들개 사냥", arenaName = field != null ? "잿빛 숲" : "투기장", soulReward = 60,
+                    description = field != null ? "잿빛 숲의 공터를 어슬렁거리는 들개 두 마리를 사냥하라." : "투기장에 풀린 잿빛 들개 두 마리를 사냥하라.",
+                    objectiveHint = field != null ? "캠프 북쪽, 숲속 공터" : "", forceAggro = field == null,
+                    arenaSpawn = fieldSpawn, waves = new() { q1Wave }, maxFaints = 3, parTime = field != null ? 150f : 90f,
                     firstClearRewards = new() { new() { item = fur, min = 3, max = 3 }, new() { item = tooth, min = 2, max = 2 } },
                     rewards = new()
                     {
@@ -508,9 +517,10 @@ namespace SoulsHunter.EditorTools
                 },
                 new()
                 {
-                    id = "hunt_ravager", title = "철갑의 포식자", arenaName = "투기장", soulReward = 300,
+                    id = "hunt_ravager", title = "철갑의 포식자", arenaName = field != null ? "잿빛 숲" : "투기장", soulReward = 300,
                     description = "Ravager, the Iron Maw를 토벌하라.",
-                    arenaSpawn = arenaSpawn, waves = new() { q2Wave }, maxFaints = 3, parTime = 240f,
+                    objectiveHint = field != null ? "숲속 공터에서 북동쪽, 바위 협곡" : "", forceAggro = field == null,
+                    arenaSpawn = fieldSpawn, waves = new() { q2Wave }, maxFaints = 3, parTime = field != null ? 300f : 240f,
                     requires = new() { "hunt_hounds" },
                     firstClearRewards = new() { new() { item = gem, min = 1, max = 1 }, new() { item = hide, min = 2, max = 2 } },
                     rewards = new()
@@ -540,9 +550,10 @@ namespace SoulsHunter.EditorTools
                 },
                 new()
                 {
-                    id = "hunt_wyrm", title = "잿불의 비룡", arenaName = "투기장", soulReward = 400,
+                    id = "hunt_wyrm", title = "잿불의 비룡", arenaName = field != null ? "잿빛 숲" : "투기장", soulReward = 400,
                     description = "거리를 벌리고 불을 뿜는 Cinder Wyrm을 토벌하라. 파고들어라.",
-                    arenaSpawn = arenaSpawn, waves = new() { q4Wave }, maxFaints = 3, parTime = 270f,
+                    objectiveHint = field != null ? "숲속 공터에서 북서쪽, 잿불 분지" : "", forceAggro = field == null,
+                    arenaSpawn = fieldSpawn, waves = new() { q4Wave }, maxFaints = 3, parTime = field != null ? 330f : 270f,
                     requires = new() { "hunt_ravager" },
                     firstClearRewards = new() { new() { item = wCore, min = 1, max = 1 }, new() { item = wMembrane, min = 1, max = 1 } },
                     rewards = new()

@@ -39,8 +39,10 @@ namespace SoulsHunter.World
 
         void Update()
         {
+            if (areas.Count == 0 || areas[0] != this) return;
+            TickBlend();
             // 지역 판정은 첫 번째 지역 오브젝트 하나만 한다
-            if (areas.Count == 0 || areas[0] != this || Time.unscaledTime < nextCheck) return;
+            if (Time.unscaledTime < nextCheck) return;
             nextCheck = Time.unscaledTime + 0.25f;
             if (!player)
             {
@@ -56,10 +58,75 @@ namespace SoulsHunter.World
                 float d = Vector3.Distance(Flat(a.transform.position), Flat(player.position));
                 if (d <= a.radius && d < bestDist) { best = a; bestDist = d; }
             }
-            if (best && best != current) best.Apply();
+            if (best && best != current)
+            {
+                // 하늘이 같으면(같은 지역 안의 작은 구역) 안개·빛을 천천히 바꾸고, 하늘이 다르면(순간이동) 바로 바꾼다
+                if (current && best.skybox == current.skybox) best.BeginBlend();
+                else best.Apply();
+            }
         }
 
         static Vector3 Flat(Vector3 v) => new(v.x, 0f, v.z);
+
+        // ───────── 부드러운 전환 ─────────
+
+        const float BlendSeconds = 2f;
+        static float blendT = 1f;
+        static Color fromFog, fromAmbient, fromSun;
+        static float fromStart, fromEnd, fromSunIntensity;
+        static Quaternion fromSunRot;
+
+        void BeginBlend()
+        {
+            FindSun();
+            fromFog = RenderSettings.fogColor;
+            fromStart = RenderSettings.fogStartDistance;
+            fromEnd = RenderSettings.fogEndDistance;
+            fromAmbient = current ? current.ambientColor : ambientColor;
+            if (sun)
+            {
+                fromSun = sun.color;
+                fromSunIntensity = sun.intensity;
+                fromSunRot = sun.transform.rotation;
+            }
+            current = this;
+            blendT = 0f;
+        }
+
+        static void TickBlend()
+        {
+            if (blendT >= 1f || !current) return;
+            blendT = Mathf.Min(1f, blendT + Time.unscaledDeltaTime / BlendSeconds);
+            float t = Mathf.SmoothStep(0f, 1f, blendT);
+            var c = current;
+            RenderSettings.fogColor = Color.Lerp(fromFog, c.fogColor, t);
+            RenderSettings.fogStartDistance = Mathf.Lerp(fromStart, c.fogStart, t);
+            RenderSettings.fogEndDistance = Mathf.Lerp(fromEnd, c.fogEnd, t);
+            SetAmbient(Color.Lerp(fromAmbient, c.ambientColor, t), RenderSettings.fogColor);
+            if (sun)
+            {
+                sun.color = Color.Lerp(fromSun, c.sunColor, t);
+                sun.intensity = Mathf.Lerp(fromSunIntensity, c.sunIntensity, t);
+                sun.transform.rotation = Quaternion.Slerp(fromSunRot, Quaternion.Euler(c.sunAngles.x, c.sunAngles.y, 0f), t);
+            }
+        }
+
+        static void SetAmbient(Color ambient, Color fog)
+        {
+            // 하늘(위)·지평선·땅(아래)으로 나눈 주변광: 아래쪽이 어두워서 입체감이 산다
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = ambient * 1.1f;
+            RenderSettings.ambientEquatorColor = Color.Lerp(ambient, fog, 0.4f) * 0.85f;
+            RenderSettings.ambientGroundColor = ambient * 0.4f;
+        }
+
+        static void FindSun()
+        {
+            if (!sun) sun = RenderSettings.sun;
+            if (!sun)
+                foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None))
+                    if (l.type == LightType.Directional) { sun = l; break; }
+        }
 
         public void Apply()
         {
@@ -70,16 +137,10 @@ namespace SoulsHunter.World
             RenderSettings.fogColor = fogColor;
             RenderSettings.fogStartDistance = fogStart;
             RenderSettings.fogEndDistance = fogEnd;
-            // 하늘(위)·지평선·땅(아래)으로 나눈 주변광: 아래쪽이 어두워서 입체감이 산다
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
-            RenderSettings.ambientSkyColor = ambientColor * 1.1f;
-            RenderSettings.ambientEquatorColor = Color.Lerp(ambientColor, fogColor, 0.4f) * 0.85f;
-            RenderSettings.ambientGroundColor = ambientColor * 0.4f;
+            SetAmbient(ambientColor, fogColor);
+            blendT = 1f;
 
-            if (!sun) sun = RenderSettings.sun;
-            if (!sun)
-                foreach (var l in FindObjectsByType<Light>(FindObjectsSortMode.None))
-                    if (l.type == LightType.Directional) { sun = l; break; }
+            FindSun();
             if (sun)
             {
                 sun.transform.rotation = Quaternion.Euler(sunAngles.x, sunAngles.y, 0f);
@@ -97,6 +158,7 @@ namespace SoulsHunter.World
             player = null;
             sun = null;
             nextCheck = 0f;
+            blendT = 1f;
         }
 
 #if UNITY_EDITOR

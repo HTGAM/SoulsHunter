@@ -74,6 +74,8 @@ namespace SoulsHunter.EditorTools
                 TunedLayer(grass, "FieldGrass", 3.5f, new Color(0.82f, 0.86f, 0.78f), 0.6f),
                 TunedLayer(dirt, "FieldDirt", 3f, new Color(0.72f, 0.66f, 0.6f), 0.8f),
                 TunedLayer(rock, "FieldRock", 5f, new Color(0.62f, 0.62f, 0.6f), 1f),
+                // 숲 바닥: 같은 잔디 텍스처를 어둡고 이끼 낀 색으로 (나무 밑)
+                TunedLayer(dirt, "FieldForestFloor", 2.5f, new Color(0.42f, 0.46f, 0.34f), 0.9f),
             };
         }
 
@@ -125,6 +127,12 @@ namespace SoulsHunter.EditorTools
         static Zone[] FieldZones => new[] { Camp, Glade, Gorge, Basin };
         static (Zone a, Zone b)[] FieldPaths => new[] { (Camp, Glade), (Glade, Gorge), (Glade, Basin) };
 
+        // 캠프와 공터 사이 길 옆의 작은 연못
+        static readonly Vector2 PondCenter = new(-22f, -58f);
+        const float PondRadius = 9f;
+        const float PondBed = 3.6f;
+        const float PondWater = 4.8f;
+
         /// <summary>사냥터를 만든다. 팩이 없으면 null.</summary>
         public static FieldLayout BuildField(System.Func<string, GameObject> create)
         {
@@ -165,7 +173,19 @@ namespace SoulsHunter.EditorTools
                     }
                     h = Mathf.Lerp(h, zn.floor, Smooth(zn.r + 4f, zn.r - 1f, d));
                 }
+                // 연못: 둘레가 완만하게 파인 웅덩이
+                float pd = Vector2.Distance(new Vector2(x, z), PondCenter);
+                h = Mathf.Lerp(h, PondBed, Smooth(PondRadius + 7f, PondRadius - 2f, pd));
                 return h;
+            }
+
+            // 숲이 우거진 정도 (나무 배치와 숲 바닥 칠하기에 같이 쓴다)
+            float ForestDensity(float x, float z)
+            {
+                var p = new Vector2(x, z);
+                if (Mathf.Max(Mathf.Abs(x), Mathf.Abs(z)) > 112f || !Clear(p, 3f)) return 0f;
+                float cluster = Mathf.PerlinNoise(x * 0.04f + 5f, z * 0.04f + 9f);
+                return Smooth(0.3f, 0.48f, cluster) * 0.8f + 0.2f;
             }
 
             var td = MakeTerrainData("HuntingFieldTerrain", FieldSize, FieldHeight, Height);
@@ -176,8 +196,9 @@ namespace SoulsHunter.EditorTools
                     dirt = Mathf.Max(dirt, Smooth(5.5f, 2.5f, DistToSegment(new Vector2(x, z), a.c, b.c, out _)) * 0.9f);
                 foreach (var zn in FieldZones)
                     dirt = Mathf.Max(dirt, Smooth(zn.r + 3f, zn.r - 4f, Vector2.Distance(new Vector2(x, z), zn.c)) * zn.dirt);
+                dirt = Mathf.Max(dirt, Smooth(PondRadius + 2.5f, PondRadius - 1f, Vector2.Distance(new Vector2(x, z), PondCenter)));
                 return dirt;
-            });
+            }, (x, z) => Smooth(0.35f, 0.9f, ForestDensity(x, z)));
 
             var terrain = CreateTerrain(root.transform, td, FieldOrigin - new Vector3(FieldSize * 0.5f, 0f, FieldSize * 0.5f));
             Vector3 W(Vector2 local) => FieldOrigin + new Vector3(local.x, 0f, local.y);
@@ -187,34 +208,39 @@ namespace SoulsHunter.EditorTools
             {
                 foreach (var zn in FieldZones) if (Vector2.Distance(p, zn.c) < zn.r + margin + (zn.wall > 0f ? 12f : 0f)) return false;
                 foreach (var (a, b) in FieldPaths) if (DistToSegment(p, a.c, b.c, out _) < 5f + margin) return false;
+                if (Vector2.Distance(p, PondCenter) < PondRadius + 2f + margin) return false;
                 return true;
             }
 
-            // 나무 (지형 나무: 가볍고 충돌 포함)
-            ScatterTrees(td, terrain, Spruces, rng, 650, FieldSize, (x, z) =>
-            {
-                var p = new Vector2(x, z);
-                if (Mathf.Max(Mathf.Abs(x), Mathf.Abs(z)) > 112f || !Clear(p, 3f)) return 0f;
-                float cluster = Mathf.PerlinNoise(x * 0.04f + 5f, z * 0.04f + 9f);
-                return cluster > 0.38f ? 1f : 0.25f;
-            });
+            // 나무 (지형 나무: 가볍고 충돌 포함). 우거진 곳은 빽빽하게, 듬성한 곳은 드문드문
+            ScatterTrees(td, terrain, Spruces, rng, 950, FieldSize, ForestDensity);
 
             var props = new GameObject("Props").transform;
             props.SetParent(root.transform, false);
 
-            // 숲 바위·덤불·통나무
-            for (int i = 0; i < 70; i++)
+            // 숲 바위·덤불·통나무·버섯 (숲이 우거진 곳일수록 많이)
+            for (int i = 0; i < 110; i++)
             {
                 var p = RandomPoint(rng, 105f);
                 if (!Clear(p, 1f)) continue;
-                FitSize(Place(Pick(RockSets, rng), props, G(p) - Vector3.up * 0.3f, Rand(rng, 0f, 360f), 1f), Rand(rng, 1.5f, 4.5f));
+                FitSize(Place(Pick(RockSets, rng), props, G(p) - Vector3.up * 0.3f, Rand(rng, 0f, 360f), 1f), Rand(rng, 1.2f, 4.5f));
             }
-            for (int i = 0; i < 60; i++)
+            for (int i = 0; i < 420 ; i++)
+            {
+                var p = RandomPoint(rng, 108f);
+                if (!Clear(p, -1.5f) || rng.NextDouble() > ForestDensity(p.x, p.y) * 0.9f + 0.15f) continue;
+                Place(Pick(Bushes, rng), props, G(p), Rand(rng, 0f, 360f), Rand(rng, 0.7f, 1.6f));
+            }
+            for (int i = 0; i < 70; i++)
             {
                 var p = RandomPoint(rng, 105f);
-                if (!Clear(p, 0f)) continue;
-                Place(Pick(Bushes, rng), props, G(p), Rand(rng, 0f, 360f), Rand(rng, 0.8f, 1.4f));
+                if (!Clear(p, 0f) || ForestDensity(p.x, p.y) < 0.5f) continue;
+                Place(Pick(Logs, rng), props, G(p), Rand(rng, 0f, 360f), Rand(rng, 0.8f, 1.3f));
+                if (Mushrooms && rng.NextDouble() < 0.6) Place(Mushrooms, props, G(p + RandomPoint(rng, 1.5f)), Rand(rng, 0f, 360f), Rand(rng, 0.8f, 1.4f));
             }
+
+            // 연못: 물 + 물가 돌·덤불
+            Pond(props, G, W, rng);
             // 길가 작은 돌
             foreach (var (a, b) in FieldPaths)
                 for (int i = 0; i < 14; i++)
@@ -283,11 +309,100 @@ namespace SoulsHunter.EditorTools
             surface.useGeometry = UnityEngine.AI.NavMeshCollectGeometry.PhysicsColliders;
             root.AddComponent<BakeNavMeshOnAwake>();
 
+            var fieldSky = Sky("Panoramics/FS013/FS013_Day.mat");
             var atmo = root.AddComponent<AreaAtmosphere>();
-            atmo.EditorSetup("잿빛 숲", 260f, Sky("Panoramics/FS013/FS013_Day.mat"), new Color(0.68f, 0.7f, 0.7f), 60f, 280f,
+            atmo.EditorSetup("잿빛 숲", 260f, fieldSky, new Color(0.68f, 0.7f, 0.7f), 60f, 280f,
                              new Color(0.55f, 0.56f, 0.54f), new Vector2(42f, -40f), new Color(1f, 0.95f, 0.88f), 1.35f);
 
+            // 구역마다 분위기 (들어가면 천천히 바뀐다): 협곡은 흙먼지, 분지는 붉은 아지랑이
+            SubArea(root.transform, "바위 협곡", W(Gorge.c), 36f, fieldSky, new Color(0.74f, 0.68f, 0.58f), 30f, 190f,
+                    new Color(0.58f, 0.54f, 0.48f), new Vector2(40f, -50f), new Color(1f, 0.9f, 0.76f), 1.3f);
+            SubArea(root.transform, "잿불 분지", W(Basin.c), 40f, fieldSky, new Color(0.62f, 0.42f, 0.32f), 20f, 160f,
+                    new Color(0.62f, 0.46f, 0.38f), new Vector2(28f, -30f), new Color(1f, 0.72f, 0.52f), 1.15f);
+
+            // 공기 효과
+            var fx = new GameObject("Ambience").transform;
+            fx.SetParent(root.transform, false);
+            AmbienceBuilder.ResetCache();
+            AmbienceBuilder.Mist(fx, G(Glade.c), Glade.r + 8f, new Color(0.88f, 0.9f, 0.92f, 0.16f), 36);
+            AmbienceBuilder.Mist(fx, G(PondCenter), PondRadius + 6f, new Color(0.85f, 0.9f, 0.95f, 0.22f), 20);
+            AmbienceBuilder.Mist(fx, G(Vector2.Lerp(Camp.c, Glade.c, 0.5f)), 30f, new Color(0.88f, 0.9f, 0.92f, 0.1f), 24);
+            AmbienceBuilder.Motes(fx, G(Glade.c), Glade.r + 6f, new Color(1f, 0.95f, 0.75f, 0.7f), 140);
+            AmbienceBuilder.Motes(fx, G(Camp.c), Camp.r + 4f, new Color(1f, 0.92f, 0.7f, 0.6f), 60);
+            AmbienceBuilder.Motes(fx, G(Gorge.c), Gorge.r, new Color(0.9f, 0.8f, 0.65f, 0.5f), 120);
+            AmbienceBuilder.RisingEmbers(fx, G(Basin.c), Basin.r - 2f, 180);
+            AmbienceBuilder.Mist(fx, G(Basin.c), Basin.r, new Color(0.55f, 0.35f, 0.28f, 0.18f), 30);
+            AmbienceBuilder.Smoke(fx, G(Camp.c + new Vector2(0f, -3f)) + Vector3.up * 0.8f, 0.7f);
+
+            // 반사 프로브 (물·금속에 주변이 비친다)
+            AmbienceBuilder.ReflectionProbe(fx, G(Glade.c) + Vector3.up * 3f, new Vector3(70f, 30f, 70f));
+            AmbienceBuilder.ReflectionProbe(fx, G(PondCenter) + Vector3.up * 2f, new Vector3(40f, 20f, 40f));
+            AmbienceBuilder.ReflectionProbe(fx, G(Camp.c) + Vector3.up * 2f, new Vector3(40f, 20f, 40f));
+
             return new FieldLayout { campSpawn = spawn, glade = G(Glade.c), gorge = G(Gorge.c), basin = G(Basin.c) };
+        }
+
+        static void SubArea(Transform parent, string name, Vector3 center, float radius, Material sky, Color fog, float fogNear, float fogFar,
+                            Color ambient, Vector2 sunDir, Color sunTint, float sunPower)
+        {
+            var go = new GameObject($"Area {name}");
+            go.transform.SetParent(parent, true);
+            go.transform.position = center;
+            go.AddComponent<AreaAtmosphere>().EditorSetup(name, radius, sky, fog, fogNear, fogFar, ambient, sunDir, sunTint, sunPower);
+        }
+
+        /// <summary>연못: 반투명한 물 + 물가 돌·덤불</summary>
+        static void Pond(Transform parent, System.Func<Vector2, Vector3> ground, System.Func<Vector2, Vector3> world, System.Random rng)
+        {
+            var water = GameObject.CreatePrimitive(PrimitiveType.Plane);
+            Object.DestroyImmediate(water.GetComponent<Collider>());
+            water.name = "Pond Water";
+            water.transform.SetParent(parent, true);
+            water.transform.position = world(PondCenter) + Vector3.up * PondWater;
+            water.transform.localScale = new Vector3(PondRadius * 0.26f, 1f, PondRadius * 0.26f);
+            water.GetComponent<Renderer>().sharedMaterial = WaterMaterial();
+            water.GetComponent<Renderer>().shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+
+            for (int i = 0; i < 14; i++)
+            {
+                float a = i * (360f / 14f) + Rand(rng, -10f, 10f);
+                var p = PondCenter + (Vector2)(Quaternion.Euler(0f, 0f, a) * Vector2.up) * (PondRadius + Rand(rng, 0.5f, 2.5f));
+                if (i % 2 == 0) FitSize(Place(Pick(RockSets, rng), parent, ground(p) - Vector3.up * 0.2f, Rand(rng, 0f, 360f), 1f), Rand(rng, 0.6f, 1.6f));
+                else Place(Pick(Bushes, rng), parent, ground(p), Rand(rng, 0f, 360f), Rand(rng, 0.6f, 1.1f));
+            }
+        }
+
+        static Material WaterMaterial()
+        {
+            string path = DataFolder + "/Water.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (!m)
+            {
+                m = new Material(LitShader);
+                AssetDatabase.CreateAsset(m, path);
+            }
+            m.SetColor("_BaseColor", new Color(0.1f, 0.18f, 0.2f, 0.78f));
+            m.SetFloat("_Smoothness", 0.96f);
+            m.SetFloat("_Metallic", 0f);
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_Blend", 0f);
+            m.SetFloat("_ZWrite", 0f);
+            m.SetFloat("_SrcBlend", (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            m.SetFloat("_DstBlend", (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            m.SetOverrideTag("RenderType", "Transparent");
+            // 잔물결
+            var normal = AssetDatabase.LoadAssetAtPath<Texture2D>(TerrainTex + "Texture_Dirt_Normal.png");
+            if (normal)
+            {
+                m.SetTexture("_BumpMap", normal);
+                m.SetTextureScale("_BumpMap", new Vector2(6f, 6f));
+                m.SetFloat("_BumpScale", 0.15f);
+                m.EnableKeyword("_NORMALMAP");
+            }
+            EditorUtility.SetDirty(m);
+            return m;
         }
 
         static void RingOfCliffs(Zone zn, Transform parent, System.Func<Vector2, Vector3> ground, System.Random rng, int count, float scale = 1f)
@@ -399,7 +514,7 @@ namespace SoulsHunter.EditorTools
                 float edge = Smooth(1.2f, 0.4f, Mathf.Abs(d - 12.5f)) * 0.35f; // 광장 테두리를 살짝 진하게
                 float road = Smooth(3.4f, 2.2f, DistToSegment(p, new Vector2(0f, -22f), new Vector2(0f, 22f), out _)) * Smooth(9f, 12f, d);
                 return Mathf.Max(plaza * 0.85f, road * 0.9f, edge);
-            });
+            }, (x, z) => Smooth(30f, 42f, new Vector2(x, z).magnitude));
             var terrain = CreateTerrain(root.transform, td, new Vector3(-VillageSize * 0.5f, 0f, -VillageSize * 0.5f));
             Vector3 G(Vector2 p) => Ground(terrain, new Vector3(p.x, 0f, p.y));
 
@@ -410,6 +525,7 @@ namespace SoulsHunter.EditorTools
                 return d < 30f || Mathf.Max(Mathf.Abs(x), Mathf.Abs(z)) > 72f ? 0f : Smooth(30f, 40f, d);
             });
 
+            var houseSpots = new List<(Vector2 pos, Vector2 dir, Bounds bounds)>();
             var houses = new GameObject("Houses").transform;
             houses.SetParent(root.transform, false);
             // 북쪽(출발 관문) 쪽은 비우고 둥글게 집을 세운다
@@ -429,6 +545,7 @@ namespace SoulsHunter.EditorTools
                 // 정면이 광장을 보게
                 go.transform.rotation = Quaternion.LookRotation(new Vector3(-dir.x, 0f, -dir.y)) * V(name).transform.rotation;
                 go.transform.position = G(p);
+                houseSpots.Add((p, dir, WorldBounds(go)));
             }
             var mill = PlaceVillageProp("WindMill", houses, G(new Vector2(-34f, 30f)), 140f, collider: true);
             if (mill) FitFootprint(mill, 8f, 14f);
@@ -457,6 +574,24 @@ namespace SoulsHunter.EditorTools
             // 광장 둘레에 같은 간격으로 6개 (관문 양옆 포함)
             for (int i = 0; i < 6; i++)
                 Lantern(props, G((Vector2)(Quaternion.Euler(0f, 0f, -(30f + i * 60f)) * Vector2.up) * 13.5f), lampMat);
+
+            // 집 앞 덤불, 굴뚝 연기, 광장의 떠다니는 먼지, 반사 프로브
+            AmbienceBuilder.ResetCache();
+            var fx = new GameObject("Ambience").transform;
+            fx.SetParent(root.transform, false);
+            int k = 0;
+            foreach (var (pos, dir, b) in houseSpots)
+            {
+                var side = new Vector2(-dir.y, dir.x);
+                foreach (float s in new[] { -1f, 1f })
+                {
+                    var bp = pos - dir * 5.5f + side * s * Rand(rng, 3f, 4.5f);
+                    Place(Pick(Bushes, rng), props, G(bp), Rand(rng, 0f, 360f), Rand(rng, 0.6f, 1f));
+                }
+                if (k++ % 3 == 0) AmbienceBuilder.Smoke(fx, new Vector3(b.center.x, b.max.y - 0.3f, b.center.z), 1f);
+            }
+            AmbienceBuilder.Motes(fx, G(Vector2.zero), 14f, new Color(1f, 0.95f, 0.75f, 0.55f), 90);
+            AmbienceBuilder.ReflectionProbe(fx, G(Vector2.zero) + Vector3.up * 3f, new Vector3(60f, 25f, 60f));
 
             // 보이지 않는 경계 (마을 밖으로 못 나가게)
             var bounds = new GameObject("Boundary").transform;
@@ -899,13 +1034,14 @@ namespace SoulsHunter.EditorTools
         }
 
         /// <summary>잔디 / 흙(dirtAt) / 바위(가파른 곳) 칠하기 + 풀 디테일</summary>
-        static void PaintTerrain(TerrainData td, float size, System.Func<float, float, float> dirtAt)
+        static void PaintTerrain(TerrainData td, float size, System.Func<float, float, float> dirtAt, System.Func<float, float, float> forestAt = null)
         {
             var layers = TerrainLayers();
             td.terrainLayers = layers;
-            td.alphamapResolution = 256;
+            td.alphamapResolution = 512;
             int res = td.alphamapResolution;
-            var map = new float[res, res, 3];
+            int layerCount = layers.Length;
+            var map = new float[res, res, layerCount];
             var grassMask = new float[res, res];
             for (int zi = 0; zi < res; zi++)
                 for (int xi = 0; xi < res; xi++)
@@ -916,9 +1052,15 @@ namespace SoulsHunter.EditorTools
                     float rock = Smooth(33f, 48f, slope);
                     float dirt = Mathf.Clamp01(dirtAt(x, z) + (Mathf.PerlinNoise(x * 0.15f, z * 0.15f) - 0.5f) * 0.25f) * (1f - rock);
                     float grass = Mathf.Max(0f, 1f - rock - dirt);
+                    // 나무 밑은 숲 바닥 (얼룩지게)
+                    float forest = layerCount > 3 && forestAt != null
+                        ? Mathf.Clamp01(forestAt(x, z) * (0.75f + Mathf.PerlinNoise(x * 0.11f + 7f, z * 0.11f + 3f) * 0.5f)) * grass
+                        : 0f;
+                    grass -= forest;
                     map[zi, xi, 0] = grass;
                     map[zi, xi, 1] = dirt;
                     map[zi, xi, 2] = rock;
+                    if (layerCount > 3) map[zi, xi, 3] = forest;
                     grassMask[zi, xi] = grass;
                 }
             td.SetAlphamaps(0, 0, map);
@@ -955,7 +1097,7 @@ namespace SoulsHunter.EditorTools
                         float g = grassMask[zi * res / dres, xi * res / dres];
                         if (g < 0.6f) continue;
                         bool flower = layer == 2;
-                        if (flower ? rng.NextDouble() < 0.97 : rng.NextDouble() < 0.35) continue;
+                        if (flower ? rng.NextDouble() < 0.93 : rng.NextDouble() < 0.18) continue;
                         d[zi, xi] = flower ? 1 : rng.Next(1, 4);
                     }
                 td.SetDetailLayer(0, 0, layer, d);
@@ -975,8 +1117,8 @@ namespace SoulsHunter.EditorTools
             t.drawInstanced = true;
             t.treeDistance = 300f;
             t.treeBillboardDistance = 90f;
-            t.detailObjectDistance = 70f;
-            t.detailObjectDensity = 0.8f;
+            t.detailObjectDistance = 110f;
+            t.detailObjectDensity = 1f;
             t.heightmapPixelError = 4f;
             if (!t.materialTemplate)
             {
@@ -1010,9 +1152,9 @@ namespace SoulsHunter.EditorTools
                 float x = -size * 0.5f + nx * size, z = -size * 0.5f + nz * size;
                 if (rng.NextDouble() > chance(x, z)) continue;
                 if (td.GetSteepness(nx, nz) > 30f) continue;
-                var cell = (Mathf.FloorToInt(x / 3.2f), Mathf.FloorToInt(z / 3.2f));
+                var cell = (Mathf.FloorToInt(x / 2.7f), Mathf.FloorToInt(z / 2.7f));
                 if (!taken.Add(cell)) continue;
-                float s = Rand(rng, 0.8f, 1.35f);
+                float s = Rand(rng, 0.7f, 1.6f);
                 trees.Add(new TreeInstance
                 {
                     position = new Vector3(nx, td.GetInterpolatedHeight(nx, nz) / td.size.y, nz),

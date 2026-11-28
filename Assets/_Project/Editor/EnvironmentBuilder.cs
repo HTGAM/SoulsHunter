@@ -92,6 +92,7 @@ namespace SoulsHunter.EditorTools
         public static FieldLayout BuildField(System.Func<string, GameObject> create)
         {
             if (!HasNature) return null;
+            EnsureReadable(Spruces.Concat(ForestRocks).Concat(TinyRocks).Concat(Cliffs).Concat(RockSets).Concat(Bushes).Concat(Logs).Append(Mountain).Append(Mushrooms));
             Gorge.entrance = (Glade.c - Gorge.c).normalized;
             Basin.entrance = (Glade.c - Basin.c).normalized;
 
@@ -336,6 +337,7 @@ namespace SoulsHunter.EditorTools
         public static bool BuildVillage(System.Func<string, GameObject> create)
         {
             if (!HasNature || !HasVillage) return false;
+            EnsureReadable(Spruces);
             var root = create("Village");
             var rng = new System.Random(11);
 
@@ -621,7 +623,7 @@ namespace SoulsHunter.EditorTools
                     t.materialTemplate = mat;
                 }
             }
-            GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.ContributeGI | StaticEditorFlags.NavigationStatic);
+            GameObjectUtility.SetStaticEditorFlags(go, StaticEditorFlags.ContributeGI);
             return t;
         }
 
@@ -663,6 +665,27 @@ namespace SoulsHunter.EditorTools
         }
 
         // ───────── 배치 도우미 ─────────
+
+        /// <summary>
+        /// 실행 중 내비메시를 구우려면 충돌 메시를 읽을 수 있어야 한다 (빌드한 게임에서).
+        /// 충돌체가 쓰는 모델 파일의 Read/Write를 켠다.
+        /// </summary>
+        static void EnsureReadable(IEnumerable<GameObject> prefabs)
+        {
+            var paths = new HashSet<string>();
+            foreach (var prefab in prefabs)
+            {
+                if (!prefab) continue;
+                foreach (var mc in prefab.GetComponentsInChildren<MeshCollider>(true))
+                    if (mc.sharedMesh) paths.Add(AssetDatabase.GetAssetPath(mc.sharedMesh));
+            }
+            foreach (var path in paths)
+            {
+                if (AssetImporter.GetAtPath(path) is not ModelImporter imp || imp.isReadable) continue;
+                imp.isReadable = true;
+                imp.SaveAndReimport();
+            }
+        }
 
         static GameObject Place(GameObject prefab, Transform parent, Vector3 pos, float yaw, float scale)
         {

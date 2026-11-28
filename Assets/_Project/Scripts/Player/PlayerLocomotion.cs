@@ -73,6 +73,7 @@ namespace SoulsHunter.Player
         /// <summary>회피 방향 (월드)</summary>
         public Vector3 DodgeDirection => dodgeDirection;
         public float RunSpeed => runSpeed;
+        public float SprintSpeed => sprintSpeed;
         public bool IsSprinting { get; private set; }
         public bool IsInvulnerable => isDodging && dodgeTimer >= dodgeIFrames.x && dodgeTimer <= dodgeIFrames.y;
         public Vector3 HorizontalVelocity => horizontalVelocity;

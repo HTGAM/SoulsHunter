@@ -736,6 +736,7 @@ namespace SoulsHunter.EditorTools
                                            out AnimationClip slotA, out AnimationClip slotB, out Vector4 clipSpeeds)
         {
             float runSpeed = ReadFloat<PlayerLocomotion>(player, "runSpeed", 4.5f);
+            float sprintSpeed = ReadFloat<PlayerLocomotion>(player, "sprintSpeed", 7f);
             float drinkDuration = ReadFloat<PlayerFlask>(player, "drinkDuration", 1.1f);
             float staggerDuration = ReadFloat<PlayerDamageHandler>(player, "staggerDuration", 0.6f);
             // 열린 Animator 창이 지워진 옛 컨트롤러를 그리려다 NullReferenceException을 내므로 먼저 닫는다
@@ -779,7 +780,12 @@ namespace SoulsHunter.EditorTools
             Add(set.idle, Vector2.zero);
             Add(set.walk, new Vector2(0f, 0.45f));
             Add(set.run, new Vector2(0f, 1f));
-            Add(set.sprint, new Vector2(0f, 1.6f));
+            // 전력 질주는 루트 모션 속도와 상관없이 실제 질주 속도 자리에 둔다 (달리기와 겹치면 둘이 섞여 어색해진다)
+            if (set.sprint)
+            {
+                tree.AddChild(set.sprint, new Vector2(0f, Mathf.Max(1.2f, sprintSpeed / runSpeed)));
+                Log($"블렌드 위치 {set.sprint.name,-28} (0.00, {Mathf.Max(1.2f, sprintSpeed / runSpeed):0.00})  ← 전력 질주 {sprintSpeed:0.0} m/s");
+            }
             Add(set.runBackward, new Vector2(0f, -1f));
             Add(set.strafeLeft, new Vector2(-1f, 0f));
             Add(set.strafeRight, new Vector2(1f, 0f));
@@ -794,7 +800,7 @@ namespace SoulsHunter.EditorTools
                 return runSpeed;
             }
             clipSpeeds = new Vector4(
-                Speed(set.sprint, set.run, set.walk),
+                Speed(set.run, set.walk), // 앞 방향 기준은 달리기 (질주 구간은 PlayerAnimationDriver가 따로 계산)
                 Speed(set.runBackward),
                 Speed(set.strafeLeft),
                 Speed(set.strafeRight));
@@ -975,6 +981,7 @@ namespace SoulsHunter.EditorTools
             SetRef(driver, "attackSlotB", slotB);
             var dso = new SerializedObject(driver);
             dso.FindProperty("locomotionClipSpeeds").vector4Value = clipSpeeds;
+            dso.FindProperty("sprintPlayback").floatValue = animationSet && animationSet.sprint ? 1.15f : 0f;
             dso.ApplyModifiedProperties();
 
             // 검은 오른손, 방패는 왼쪽 팔뚝에 붙인다

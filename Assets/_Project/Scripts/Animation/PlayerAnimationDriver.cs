@@ -36,6 +36,8 @@ namespace SoulsHunter.Animations
         [SerializeField] Vector4 locomotionClipSpeeds = new(4.5f, 4.5f, 4.5f, 4.5f);
         [Tooltip("이동 애니메이션 최대 배속. 너무 크면 발이 다다닥 떨려 보인다 (전력 질주 클립이 없을 때)")]
         [SerializeField] float maxLocomotionPlaybackSpeed = 1.6f;
+        [Tooltip("전력 질주 클립 재생 배속 (0이면 질주 클립 없음 → 달리기 클립을 빨리 돌림)")]
+        [SerializeField] float sprintPlayback = 0f;
 
         PlayerLocomotion locomotion;
         PlayerCombat combat;
@@ -170,7 +172,16 @@ namespace SoulsHunter.Animations
             float f = Mathf.Max(0.1f, dz >= 0f ? locomotionClipSpeeds.x : locomotionClipSpeeds.y);
             float s = Mathf.Max(0.1f, dx >= 0f ? locomotionClipSpeeds.w : locomotionClipSpeeds.z);
             float edge = 1f / Mathf.Sqrt(dz * dz / (f * f) + dx * dx / (s * s));
-            return Mathf.Clamp(speed / edge, 1f, maxLocomotionPlaybackSpeed);
+            float playback = Mathf.Clamp(speed / edge, 1f, maxLocomotionPlaybackSpeed);
+
+            // 전력 질주 클립이 있으면: 달리기 속도를 넘는 구간은 달리기 배속 → 질주 배속으로 부드럽게
+            if (sprintPlayback > 0f && v.z > locomotion.RunSpeed * 1.02f && locomotion.SprintSpeed > locomotion.RunSpeed)
+            {
+                float t = Mathf.InverseLerp(locomotion.RunSpeed, locomotion.SprintSpeed, v.z);
+                float runPlayback = Mathf.Clamp(locomotion.RunSpeed / f, 1f, maxLocomotionPlaybackSpeed);
+                return Mathf.Lerp(runPlayback, sprintPlayback, t);
+            }
+            return playback;
         }
 
         /// <summary>

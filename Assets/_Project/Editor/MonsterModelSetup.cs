@@ -34,6 +34,7 @@ namespace SoulsHunter.EditorTools
             public string idle, walk, run, hit, stagger, death, roar;
             public (string attack, string clip)[] attacks;
             public bool flinch;
+            public bool boss;
             public string[] muzzleBones;
         }
 
@@ -41,7 +42,7 @@ namespace SoulsHunter.EditorTools
         {
             new()
             {
-                id = "Ravager", enemyNamePrefixes = new[] { "Ravager" },
+                id = "Ravager", enemyNamePrefixes = new[] { "Ravager" }, boss = true,
                 prefab = "Assets/Hatogame_new/BossMonsterPack1/Wolfboss/Perfabs/Wolfboss_A.prefab",
                 clipFolder = "Assets/Hatogame_new/BossMonsterPack1/Wolfboss/Animation",
                 size = 5.5f,
@@ -60,7 +61,7 @@ namespace SoulsHunter.EditorTools
             },
             new()
             {
-                id = "CinderWyrm", enemyNamePrefixes = new[] { "Cinder Wyrm" },
+                id = "CinderWyrm", enemyNamePrefixes = new[] { "Cinder Wyrm" }, boss = true,
                 prefab = "Assets/FourEvilDragonsPBR/Prefab/DragonSoulEater/Red.prefab",
                 clipFolder = "Assets/FourEvilDragonsPBR/Animations/DragonSoulEater",
                 size = 7f,
@@ -489,6 +490,7 @@ namespace SoulsHunter.EditorTools
             if (p.muzzleBones != null)
                 foreach (var n in p.muzzleBones)
                     if (muzzle = bones.FirstOrDefault(t => t.name == n)) break;
+            enemy.EditorSetBoss(p.boss);
             enemy.EditorSetModel(muzzle);
             EditorUtility.SetDirty(enemy);
 

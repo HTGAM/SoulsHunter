@@ -23,6 +23,9 @@ namespace SoulsHunter.Enemy
         [SerializeField] Transform target;
         [SerializeField] float aggroRange = 18f;
 
+        [Tooltip("보스면 나타나자마자 화면 아래에 체력바가 뜬다 (락온 안 해도)")]
+        [SerializeField] bool isBoss;
+
         [Header("Movement")]
         [SerializeField] float moveSpeed = 4f;
         [SerializeField] float turnSpeed = 120f;
@@ -117,6 +120,8 @@ namespace SoulsHunter.Enemy
         public State CurrentState => state;
         public EnemyAttack CurrentAttack => current;
         public bool IsEnraged => enraged;
+        public bool IsBoss => isBoss;
+        public Health Health => health ? health : GetComponent<Health>();
         public IReadOnlyList<EnemyAttack> Attacks => attacks;
         /// <summary>공격 동작 배속 (분노 중이면 빨라짐)</summary>
         public float AttackTimeScale => enraged ? enrageAttackSpeed : 1f;
@@ -502,8 +507,27 @@ namespace SoulsHunter.Enemy
         /// <summary>거리와 상관없이 바로 플레이어를 쫓게 한다 (투기장).</summary>
         public void ForceAggro() => forceAggro = true;
 
-        void OnEnable() => GameEvents.WorldReset += OnWorldReset;
-        void OnDisable() => GameEvents.WorldReset -= OnWorldReset;
+        void OnEnable()
+        {
+            GameEvents.WorldReset += OnWorldReset;
+            if (isBoss && !activeBosses.Contains(this)) activeBosses.Add(this);
+        }
+
+        void OnDisable()
+        {
+            GameEvents.WorldReset -= OnWorldReset;
+            activeBosses.Remove(this);
+        }
+
+        // ───────── 보스 ─────────
+
+        static readonly List<EnemyAI> activeBosses = new();
+
+        /// <summary>지금 씬에 나와 있는(활성화된) 보스들. 화면 아래 보스 체력바가 쓴다.</summary>
+        public static IReadOnlyList<EnemyAI> ActiveBosses => activeBosses;
+
+        [RuntimeInitializeOnLoadMethod(RuntimeInitializeLoadType.SubsystemRegistration)]
+        static void ResetBosses() => activeBosses.Clear();
 
         void OnWorldReset()
         {
@@ -593,6 +617,8 @@ namespace SoulsHunter.Enemy
         }
 
         /// <summary>모델을 입힐 때: 투사체 발사 위치를 뼈로 바꾸고, 도형용 눈(예고 표시)은 뗀다</summary>
+        public void EditorSetBoss(bool boss) => isBoss = boss;
+
         public void EditorSetModel(Transform muzzleBone)
         {
             muzzle = muzzleBone;

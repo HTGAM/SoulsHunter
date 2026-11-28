@@ -26,10 +26,12 @@ namespace SoulsHunter.UI
         [Tooltip("최대치 100당 바 길이(px)")]
         [SerializeField] float pixelsPer100 = 300f;
 
-        Bar hpBar, staminaBar, targetBar;
-        GameObject targetRoot;
-        Text targetName;
-        Health trackedTarget;
+        Bar hpBar, staminaBar;
+        // 화면 아래 대상 체력바: 보스(락온 안 해도 항상) + 락온한 일반 몬스터
+        const int MaxTargetBars = 3;
+        readonly TargetBar[] targetBars = new TargetBar[MaxTargetBars];
+        readonly System.Collections.Generic.List<Health> wanted = new();
+        Font font;
         Text deathText;
         Image deathBand;
         float deathAlpha;
@@ -66,19 +68,31 @@ namespace SoulsHunter.UI
             hpBar.Tick(dt);
             staminaBar.Tick(dt);
 
-            Health target = null;
-            if (playerCamera && playerCamera.IsLockedOn) target = playerCamera.CurrentTarget.GetComponentInParent<Health>();
-            if (target != trackedTarget)
+            // 보여줄 대상: 나와 있는 보스들 먼저, 그다음 락온한 대상(보스가 아니면)
+            wanted.Clear();
+            foreach (var boss in SoulsHunter.Enemy.EnemyAI.ActiveBosses)
             {
-                trackedTarget = target;
-                if (target) { targetName.text = target.DisplayName; targetBar.Snap(target.Normalized); }
+                var h = boss ? boss.Health : null;
+                if (h && !h.IsDead && !wanted.Contains(h) && wanted.Count < MaxTargetBars) wanted.Add(h);
             }
-            targetRoot.SetActive(target);
-            if (target)
+            if (playerCamera && playerCamera.IsLockedOn && playerCamera.CurrentTarget)
             {
-                targetBar.Set(target.Normalized);
-                targetBar.Tick(dt);
+                var locked = playerCamera.CurrentTarget.GetComponentInParent<Health>();
+                if (locked && !locked.IsDead && !wanted.Contains(locked) && wanted.Count < MaxTargetBars) wanted.Add(locked);
             }
+
+            // 이미 보여주던 대상은 같은 자리 유지, 새 대상은 빈 자리에
+            foreach (var bar in targetBars)
+                if (bar.Tracked && !wanted.Contains(bar.Tracked)) bar.Release();
+            foreach (var h in wanted)
+            {
+                bool shown = false;
+                foreach (var bar in targetBars) if (bar.Tracked == h) { bar.Keep(); shown = true; break; }
+                if (shown) continue;
+                foreach (var bar in targetBars)
+                    if (bar.IsFree) { bar.Track(h); break; }
+            }
+            foreach (var bar in targetBars) bar.Tick(dt);
 
             // YOU DIED: 천천히 나타나고, 부활하면 바로 사라진다
             bool dead = playerHealth && playerHealth.IsDead;
@@ -106,28 +120,10 @@ namespace SoulsHunter.UI
             hpBar = new Bar(root, "HP", new Vector2(0f, 1f), new Vector2(60f, -50f), pixelsPer100, 18f, healthColor, chipColor, backColor);
             staminaBar = new Bar(root, "Stamina", new Vector2(0f, 1f), new Vector2(60f, -76f), pixelsPer100, 12f, staminaColor, chipColor, backColor);
 
-            targetRoot = new GameObject("Target", typeof(RectTransform));
-            var tr = (RectTransform)targetRoot.transform;
-            tr.SetParent(root, false);
-            tr.anchorMin = tr.anchorMax = new Vector2(0.5f, 0f);
-            tr.pivot = new Vector2(0.5f, 0f);
-            tr.anchoredPosition = new Vector2(0f, 90f);
-            tr.sizeDelta = new Vector2(900f, 60f);
-
-            targetBar = new Bar(tr, "Target HP", new Vector2(0f, 0f), new Vector2(0f, 7f), 900f, 14f, targetColor, chipColor, backColor);
-
-            var nameGo = new GameObject("Name", typeof(RectTransform), typeof(Text));
-            var nr = (RectTransform)nameGo.transform;
-            nr.SetParent(tr, false);
-            nr.anchorMin = nr.anchorMax = nr.pivot = new Vector2(0f, 0f);
-            nr.anchoredPosition = new Vector2(0f, 20f);
-            nr.sizeDelta = new Vector2(900f, 34f);
-            targetName = nameGo.GetComponent<Text>();
-            targetName.font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
-            targetName.fontSize = 26;
-            targetName.color = new Color(0.95f, 0.92f, 0.85f);
-            targetName.alignment = TextAnchor.LowerLeft;
-            targetRoot.SetActive(false);
+            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            // 아래에서 위로 쌓는다 (첫 번째 = 첫 보스)
+            for (int i = 0; i < MaxTargetBars; i++)
+                targetBars[i] = new TargetBar(root, i, 90f + i * 72f, font, targetColor, chipColor, backColor);
 
             // YOU DIED
             var bandGo = new GameObject("Death Band", typeof(RectTransform), typeof(Image));
@@ -147,12 +143,93 @@ namespace SoulsHunter.UI
             dr.anchorMax = Vector2.one;
             dr.offsetMin = dr.offsetMax = Vector2.zero;
             deathText = deathGo.GetComponent<Text>();
-            deathText.font = targetName.font;
+            deathText.font = font;
             deathText.fontSize = 110;
             deathText.alignment = TextAnchor.MiddleCenter;
             deathText.text = "YOU DIED";
             deathText.raycastTarget = false;
             deathText.color = Color.clear;
+        }
+
+        /// <summary>화면 아래 대상 체력바 한 줄 (이름 + 막대). 나타날 때와 사라질 때 서서히 바뀐다.</summary>
+        class TargetBar
+        {
+            const float FadeSpeed = 3f;
+
+            readonly GameObject go;
+            readonly CanvasGroup group;
+            readonly Bar bar;
+            readonly Text label;
+            float alpha;
+            bool releasing;
+
+            public Health Tracked { get; private set; }
+            /// <summary>새 대상을 받을 수 있음 (비었거나 사라지는 중)</summary>
+            public bool IsFree => !Tracked || releasing;
+
+            public TargetBar(Transform parent, int index, float y, Font font, Color fillColor, Color chipColor, Color backColor)
+            {
+                go = new GameObject($"Target {index}", typeof(RectTransform), typeof(CanvasGroup));
+                var tr = (RectTransform)go.transform;
+                tr.SetParent(parent, false);
+                tr.anchorMin = tr.anchorMax = new Vector2(0.5f, 0f);
+                tr.pivot = new Vector2(0.5f, 0f);
+                tr.anchoredPosition = new Vector2(0f, y);
+                tr.sizeDelta = new Vector2(900f, 60f);
+                group = go.GetComponent<CanvasGroup>();
+                group.blocksRaycasts = group.interactable = false;
+
+                bar = new Bar(tr, "HP", new Vector2(0f, 0f), new Vector2(0f, 7f), 900f, 14f, fillColor, chipColor, backColor);
+
+                var nameGo = new GameObject("Name", typeof(RectTransform), typeof(Text));
+                var nr = (RectTransform)nameGo.transform;
+                nr.SetParent(tr, false);
+                nr.anchorMin = nr.anchorMax = nr.pivot = new Vector2(0f, 0f);
+                nr.anchoredPosition = new Vector2(0f, 20f);
+                nr.sizeDelta = new Vector2(900f, 34f);
+                label = nameGo.GetComponent<Text>();
+                label.font = font;
+                label.fontSize = 26;
+                label.color = new Color(0.95f, 0.92f, 0.85f);
+                label.alignment = TextAnchor.LowerLeft;
+                label.raycastTarget = false;
+                var shadow = nameGo.AddComponent<Shadow>();
+                shadow.effectColor = new Color(0f, 0f, 0f, 0.8f);
+
+                go.SetActive(false);
+            }
+
+            public void Track(Health h)
+            {
+                Tracked = h;
+                releasing = false;
+                label.text = h.DisplayName;
+                bar.Snap(h.Normalized);
+                if (!go.activeSelf) { alpha = 0f; go.SetActive(true); }
+            }
+
+            /// <summary>대상이 죽거나 사라짐: 막대를 비우고 서서히 숨긴다</summary>
+            public void Release() => releasing = true;
+
+            /// <summary>사라지던 중에 다시 보여줄 대상이 되면 그대로 유지</summary>
+            public void Keep() => releasing = false;
+
+            public void Tick(float dt)
+            {
+                if (!Tracked && !go.activeSelf) return;
+                if (Tracked && !releasing) bar.Set(Tracked.Normalized);
+                else if (releasing && Tracked && Tracked.IsDead) bar.Set(0f);
+                bar.Tick(dt);
+
+                alpha = Mathf.MoveTowards(alpha, releasing ? 0f : 1f, FadeSpeed * dt);
+                group.alpha = alpha;
+                if (releasing && alpha <= 0f)
+                {
+                    Tracked = null;
+                    releasing = false;
+                    go.SetActive(false);
+                }
+            }
         }
 
         /// <summary>배경 + 잔상(chip) + 채움으로 된 막대</summary>

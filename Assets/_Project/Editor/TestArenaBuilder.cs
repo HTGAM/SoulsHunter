@@ -209,6 +209,7 @@ namespace SoulsHunter.EditorTools
             EditorUtility.SetDirty(rewards);
 
             var ai = boss.AddComponent<EnemyAI>();
+            ai.EditorSetBoss(true);
             SetFloat(ai, "enrageThreshold", 0.5f); // 체력 50% 이하에서 분노
             SetRef(ai, "telegraphMaterial", GetOrCreateTelegraphMaterial());
             var so = new SerializedObject(ai);
@@ -797,6 +798,7 @@ namespace SoulsHunter.EditorTools
             }
 
             var ai = wyrm.AddComponent<EnemyAI>();
+            ai.EditorSetBoss(true);
             ai.EditorSetup(new List<EnemyAttack>
             {
                 //   이름          최소/최대거리  각도  가중치 쿨   피해 강인  예고   판정   빈틈  추적  전진 전진구간      판정중심           판정크기

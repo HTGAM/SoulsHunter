@@ -68,12 +68,13 @@ namespace SoulsHunter.UI
             hpBar.Tick(dt);
             staminaBar.Tick(dt);
 
-            // 보여줄 대상: 나와 있는 보스들 먼저, 그다음 락온한 대상(보스가 아니면)
+            // 보여줄 대상: 플레이어를 알아챈 보스들 먼저, 그다음 락온한 대상(보스가 아니면)
             wanted.Clear();
             foreach (var boss in SoulsHunter.Enemy.EnemyAI.ActiveBosses)
             {
                 var h = boss ? boss.Health : null;
-                if (h && !h.IsDead && !wanted.Contains(h) && wanted.Count < MaxTargetBars) wanted.Add(h);
+                // 보스가 플레이어를 알아챈 뒤부터 (멀리서 대기 중이면 안 띄운다)
+                if (h && !h.IsDead && boss.IsEngaged && !wanted.Contains(h) && wanted.Count < MaxTargetBars) wanted.Add(h);
             }
             if (playerCamera && playerCamera.IsLockedOn && playerCamera.CurrentTarget)
             {

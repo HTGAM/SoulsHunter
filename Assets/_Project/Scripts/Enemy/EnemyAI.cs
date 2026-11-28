@@ -121,6 +121,8 @@ namespace SoulsHunter.Enemy
         public EnemyAttack CurrentAttack => current;
         public bool IsEnraged => enraged;
         public bool IsBoss => isBoss;
+        /// <summary>플레이어를 알아채고 싸우는 중 (대기 상태가 아님)</summary>
+        public bool IsEngaged => state != State.Idle;
         public Health Health => health ? health : GetComponent<Health>();
         public IReadOnlyList<EnemyAttack> Attacks => attacks;
         /// <summary>공격 동작 배속 (분노 중이면 빨라짐)</summary>

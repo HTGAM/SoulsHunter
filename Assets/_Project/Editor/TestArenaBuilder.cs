@@ -62,6 +62,9 @@ namespace SoulsHunter.EditorTools
             Undo.SetCurrentGroupName("Build Test Arena");
             int group = Undo.GetCurrentGroup();
 
+            // 지우기 전에 지금 입혀 둔 캐릭터 모델을 기억해 두었다가 새 플레이어에 다시 입힌다
+            var characterModel = CharacterSetupWindow.CurrentModelAsset();
+
             if (!RemoveOld()) return;
 
             var groundMat = MakeMaterial(new Color(0.35f, 0.37f, 0.4f));
@@ -148,6 +151,9 @@ namespace SoulsHunter.EditorTools
             BuildHuntContent(arenaSpawn, enemyMat, weakMat);
             // 에셋스토어 몬스터 모델이 있으면 도형 대신 입힌다
             MonsterModelSetup.ApplyToScene(out _);
+            // 캐릭터 모델도 다시 입힌다 (Character Setup을 한 번이라도 했으면)
+            if (!CharacterSetupWindow.ReapplyToScene(characterModel, out var characterReport))
+                Debug.Log("[SoulsHunter] " + characterReport);
 
             Selection.activeGameObject = player;
             Undo.CollapseUndoOperations(group);

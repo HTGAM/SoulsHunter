@@ -563,6 +563,57 @@ namespace SoulsHunter.EditorTools
             EnsureFolder();
             var controller = BuildController(animationSet, player, out var slotA, out var slotB, out var clipSpeeds);
             ApplyToPlayer(player, controller, slotA, slotB, clipSpeeds);
+            // Build Test Arena가 플레이어를 다시 만들 때 같은 모델을 입히도록 기억해 둔다
+            EditorPrefs.SetString(ModelPathPref, AssetDatabase.GetAssetPath(model));
+        }
+
+        const string ModelPathPref = "SoulsHunter.CharacterModelPath";
+        const string DefaultModelPath = "Assets/_Project/Art/character.fbx";
+
+        /// <summary>
+        /// 씬의 Player에 캐릭터 모델을 다시 입힌다 (Build Test Arena가 플레이어를 새로 만든 뒤 호출).
+        /// 모델은 preferred → 마지막으로 Character Setup에서 쓴 모델 → 기본 경로 순으로 찾는다.
+        /// 애니메이션 세트가 아직 없으면(Character Setup을 한 번도 안 했으면) 아무것도 하지 않는다.
+        /// </summary>
+        /// <returns>입혔으면 true</returns>
+        public static bool ReapplyToScene(GameObject preferredModel, out string report)
+        {
+            report = "";
+            var player = GameObject.FindWithTag("Player");
+            var set = AssetDatabase.LoadAssetAtPath<CharacterAnimationSet>(SetPath);
+            var modelAsset = preferredModel;
+            if (!modelAsset) modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(EditorPrefs.GetString(ModelPathPref, ""));
+            if (!modelAsset) modelAsset = AssetDatabase.LoadAssetAtPath<GameObject>(DefaultModelPath);
+            if (!player || !set || !modelAsset)
+            {
+                report = "캐릭터 모델 또는 애니메이션 세트가 없어서 건너뛰었어요 (SoulsHunter/Character Setup).";
+                return false;
+            }
+
+            var tool = CreateInstance<CharacterSetupWindow>();
+            try
+            {
+                tool.model = modelAsset;
+                tool.animationSet = set;
+                EnsureFolder();
+                var controller = tool.BuildController(set, player, out var slotA, out var slotB, out var clipSpeeds);
+                tool.ApplyToPlayer(player, controller, slotA, slotB, clipSpeeds);
+                report = tool.log;
+            }
+            finally
+            {
+                DestroyImmediate(tool);
+            }
+            EditorPrefs.SetString(ModelPathPref, AssetDatabase.GetAssetPath(modelAsset));
+            return true;
+        }
+
+        /// <summary>Player 아래에 입혀 둔 캐릭터 모델의 원본 에셋 (없으면 null)</summary>
+        public static GameObject CurrentModelAsset()
+        {
+            var player = GameObject.FindWithTag("Player");
+            var model = player ? player.transform.Find("Model") : null;
+            return model ? PrefabUtility.GetCorrespondingObjectFromOriginalSource(model.gameObject) : null;
         }
 
         /// <summary>컴포넌트의 숫자 필드 값을 읽는다 (없으면 기본값)</summary>

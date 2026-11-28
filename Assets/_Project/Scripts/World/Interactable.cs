@@ -16,6 +16,15 @@ namespace SoulsHunter.World
 
         public float InteractRange => interactRange;
 
+        [Tooltip("머리 위 표시(마름모 + 이름)의 높이")]
+        [SerializeField] float markerHeight = 2.6f;
+
+        /// <summary>화면에 위치 표시를 띄울지 (출발 관문처럼 눈에 잘 띄는 곳은 끈다)</summary>
+        public virtual bool ShowMarker => true;
+        /// <summary>표시에 쓰는 짧은 이름</summary>
+        public virtual string MarkerLabel => gameObject.name;
+        public Vector3 MarkerPosition => transform.position + Vector3.up * markerHeight;
+
         /// <summary>화면에 표시할 안내 문구 (예: "휴식한다")</summary>
         public abstract string Prompt { get; }
 

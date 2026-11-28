@@ -15,6 +15,8 @@ namespace SoulsHunter.World
 
         float baseIntensity;
 
+        public override string MarkerLabel => "혼의 제단";
+
         public override string Prompt
         {
             get

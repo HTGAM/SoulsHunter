@@ -54,7 +54,7 @@ namespace SoulsHunter.UI
                 if (!weaponSpecial) weaponSpecial = player.GetComponent<PlayerWeaponSpecial>();
                 if (!combat) combat = player.GetComponent<PlayerCombat>();
             }
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            font = UITheme.Font;
             BuildUI();
 
             if (combat) combat.ChargeChanged += OnChargeChanged;
@@ -287,7 +287,7 @@ namespace SoulsHunter.UI
             questText.gameObject.SetActive(false);
 
             // 상호작용 안내 (가운데 아래)
-            promptRoot = MakePanel(root, "Prompt", new Color(0f, 0f, 0f, 0.65f));
+            promptRoot = MakePanel(root, "Prompt", UITheme.Panel);
             var pr = (RectTransform)promptRoot.transform;
             pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0f);
             pr.pivot = new Vector2(0.5f, 0f);
@@ -317,7 +317,7 @@ namespace SoulsHunter.UI
             layout.spacing = 4f;
 
             // 가방 창 (오른쪽)
-            inventoryRoot = MakePanel(root, "Inventory", new Color(0.05f, 0.04f, 0.03f, 0.88f));
+            inventoryRoot = MakePanel(root, "Inventory", new Color(0.05f, 0.05f, 0.07f, 0.9f));
             var ir = (RectTransform)inventoryRoot.transform;
             ir.anchorMin = ir.anchorMax = ir.pivot = new Vector2(1f, 0.5f);
             ir.anchoredPosition = new Vector2(-60f, 60f);
@@ -340,7 +340,9 @@ namespace SoulsHunter.UI
             t.raycastTarget = false;
             t.horizontalOverflow = HorizontalWrapMode.Wrap;
             t.verticalOverflow = VerticalWrapMode.Overflow;
-            go.GetComponent<Outline>().effectColor = new Color(0f, 0f, 0f, 0.8f);
+            var outline = go.GetComponent<Outline>();
+            outline.effectColor = new Color(0f, 0f, 0f, 0.65f);
+            outline.effectDistance = new Vector2(1.2f, -1.2f);
             return t;
         }
 
@@ -351,6 +353,7 @@ namespace SoulsHunter.UI
             var img = go.GetComponent<Image>();
             img.color = color;
             img.raycastTarget = false;
+            UITheme.Frame(img, 0.7f);
             return go;
         }
 

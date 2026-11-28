@@ -27,6 +27,7 @@ namespace SoulsHunter.World
         float flashTime = -10f;
 
         public string ForgeName => forgeName;
+        public override string MarkerLabel => forgeName;
 
         public override string Prompt
         {

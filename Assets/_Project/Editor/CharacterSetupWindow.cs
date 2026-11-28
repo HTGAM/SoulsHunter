@@ -764,6 +764,7 @@ namespace SoulsHunter.EditorTools
             // 이동: 2D 블렌드 트리 (MoveX = 옆, MoveY = 앞뒤, 단위 = 코드의 달리기 속도)
             // 각 클립을 '실제로 움직이는 속도' 위치에 둬서 걸음과 이동 속도가 맞게 한다.
             var loco = ctrl.CreateBlendTreeInController("Locomotion", out var tree, 0);
+            loco.iKOnFeet = true; // 발이 땅에 붙어 보이게 (Humanoid 발 IK)
             tree.blendType = BlendTreeType.FreeformDirectional2D;
             tree.blendParameter = "MoveX";
             tree.blendParameterY = "MoveY";

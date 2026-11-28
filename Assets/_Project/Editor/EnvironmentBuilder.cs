@@ -470,7 +470,7 @@ namespace SoulsHunter.EditorTools
 
             var atmo = root.AddComponent<AreaAtmosphere>();
             atmo.EditorSetup("마을", 140f, Sky("Panoramics/FS002/FS002_Day.mat"), new Color(0.7f, 0.74f, 0.78f), 60f, 240f,
-                             new Color(0.58f, 0.6f, 0.62f), new Vector2(42f, 30f), new Color(1f, 0.95f, 0.86f), 1.3f);
+                             new Color(0.68f, 0.68f, 0.66f), new Vector2(45f, 30f), new Color(1f, 0.96f, 0.88f), 1.5f);
             return true;
         }
 

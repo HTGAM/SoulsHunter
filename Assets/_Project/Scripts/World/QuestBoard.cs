@@ -15,6 +15,8 @@ namespace SoulsHunter.World
 
         HuntManager Manager => HuntManager.Instance;
 
+        public override string MarkerLabel => "퀘스트 게시판";
+
         public override string Prompt
         {
             get

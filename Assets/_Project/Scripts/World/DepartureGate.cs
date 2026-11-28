@@ -11,6 +11,9 @@ namespace SoulsHunter.World
         [Tooltip("퀘스트를 받으면 켜지는 표시 (빛나는 문 등, 선택)")]
         [SerializeField] GameObject readyVisual;
 
+        // 관문은 크고 눈에 잘 띄므로 머리 위 표시를 띄우지 않는다
+        public override bool ShowMarker => false;
+
         HuntManager Manager => HuntManager.Instance;
 
         public override string Prompt

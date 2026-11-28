@@ -13,6 +13,8 @@ namespace SoulsHunter.World
         GameObject cachedPlayer;
         PlayerWeapon weapon;
 
+        public override string MarkerLabel => "무기 거치대";
+
         public override string Prompt
         {
             get

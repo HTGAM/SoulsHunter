@@ -138,6 +138,7 @@ namespace SoulsHunter.EditorTools
             hud.gameObject.AddComponent<DamageNumbers>();
             hud.gameObject.AddComponent<QuestResultScreen>();
             hud.gameObject.AddComponent<SkillTreeScreen>();
+            hud.gameObject.AddComponent<InteractableMarkers>();
 
             // 안전구역 시설
             BuildForge(new Vector3(5f, 0f, 2f));

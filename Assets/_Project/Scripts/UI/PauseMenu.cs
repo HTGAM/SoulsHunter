@@ -40,7 +40,7 @@ namespace SoulsHunter.UI
                 var player = GameObject.FindWithTag("Player");
                 if (player) input = player.GetComponent<PlayerInputHandler>();
             }
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            font = UITheme.Font;
             EnsureEventSystem();
             BuildUI();
             root.SetActive(false);
@@ -217,6 +217,7 @@ namespace SoulsHunter.UI
             var go = Panel(parent, label, new Color(0.18f, 0.15f, 0.12f, 0.95f));
             var img = go.GetComponent<Image>();
             img.raycastTarget = true;
+            UITheme.Frame(img, 0.7f);
             ((RectTransform)go.transform).sizeDelta = new Vector2(360f, 64f);
 
             var button = go.AddComponent<Button>();

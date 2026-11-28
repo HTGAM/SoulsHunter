@@ -36,7 +36,7 @@ namespace SoulsHunter.UI
 
         void Awake()
         {
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            font = UITheme.Font;
             player = GameObject.FindWithTag("Player");
 
             var canvasGo = new GameObject("Damage Numbers Canvas", typeof(Canvas));

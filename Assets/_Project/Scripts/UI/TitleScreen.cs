@@ -37,7 +37,7 @@ namespace SoulsHunter.UI
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
 
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            font = UITheme.Font;
             EnsureEventSystem();
             BuildUI();
         }
@@ -216,6 +216,7 @@ namespace SoulsHunter.UI
             var go = Panel(parent, label, new Color(0.18f, 0.15f, 0.12f, 0.92f));
             var img = go.GetComponent<Image>();
             img.raycastTarget = true;
+            UITheme.Frame(img, 0.7f);
             ((RectTransform)go.transform).sizeDelta = new Vector2(420f, 66f);
 
             var button = go.AddComponent<Button>();

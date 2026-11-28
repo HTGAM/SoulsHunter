@@ -126,7 +126,7 @@ namespace SoulsHunter.UI
             img.color = PanelColor;
             img.raycastTarget = false;
 
-            var font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            var font = UITheme.Font;
 
             rankText = MakeText(pr, font, 150, TextAnchor.UpperRight);
             rankText.fontStyle = FontStyle.Bold;

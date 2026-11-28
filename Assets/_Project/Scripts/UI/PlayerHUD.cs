@@ -121,7 +121,7 @@ namespace SoulsHunter.UI
             hpBar = new Bar(root, "HP", new Vector2(0f, 1f), new Vector2(60f, -50f), pixelsPer100, 18f, healthColor, chipColor, backColor);
             staminaBar = new Bar(root, "Stamina", new Vector2(0f, 1f), new Vector2(60f, -76f), pixelsPer100, 12f, staminaColor, chipColor, backColor);
 
-            font = Resources.GetBuiltinResource<Font>("LegacyRuntime.ttf");
+            font = UITheme.Font;
             // 아래에서 위로 쌓는다 (첫 번째 = 첫 보스)
             for (int i = 0; i < MaxTargetBars; i++)
                 targetBars[i] = new TargetBar(root, i, 90f + i * 72f, font, targetColor, chipColor, backColor);
@@ -251,14 +251,32 @@ namespace SoulsHunter.UI
                 root.anchoredPosition = pos;
                 root.sizeDelta = new Vector2(width, height);
 
+                // 어두운 바탕 + 얇은 금색 테두리
+                var back = root.GetComponent<Image>();
+                back.color = new Color(0.03f, 0.03f, 0.04f, Mathf.Max(0.7f, backColor.a));
+                UITheme.Frame(back, 0.6f);
+
                 chip = MakeImage("Chip", root, chipColor);
                 fill = MakeImage("Fill", root, fillColor);
+                // 안쪽으로 2px 들여서 테두리와 띄운다
+                float inset = height >= 12f ? 2f : 1.5f;
                 foreach (var r in new[] { chip, fill })
                 {
                     r.anchorMin = Vector2.zero;
                     r.anchorMax = Vector2.one;
-                    r.offsetMin = r.offsetMax = Vector2.zero;
+                    r.offsetMin = new Vector2(inset, inset);
+                    r.offsetMax = new Vector2(-inset, -inset);
                 }
+                // 윗부분 광택 (채워진 만큼만)
+                var shine = MakeImage("Shine", fill, new Color(1f, 1f, 1f, 0.16f));
+                shine.anchorMin = new Vector2(0f, 0.55f);
+                shine.anchorMax = Vector2.one;
+                shine.offsetMin = shine.offsetMax = Vector2.zero;
+                // 아랫부분 그늘
+                var shade = MakeImage("Shade", fill, new Color(0f, 0f, 0f, 0.22f));
+                shade.anchorMin = Vector2.zero;
+                shade.anchorMax = new Vector2(1f, 0.3f);
+                shade.offsetMin = shade.offsetMax = Vector2.zero;
             }
 
             static RectTransform MakeImage(string name, Transform parent, Color color)

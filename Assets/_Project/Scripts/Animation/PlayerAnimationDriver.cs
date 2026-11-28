@@ -34,7 +34,8 @@ namespace SoulsHunter.Animations
         [SerializeField] AnimationClip attackSlotB;
         [Tooltip("이동 클립이 실제로 움직이는 속도(m/s): 앞, 뒤, 왼쪽, 오른쪽. 이보다 빨리 움직이면 애니메이션을 빨리 재생")]
         [SerializeField] Vector4 locomotionClipSpeeds = new(4.5f, 4.5f, 4.5f, 4.5f);
-        [SerializeField] float maxLocomotionPlaybackSpeed = 2.2f;
+        [Tooltip("이동 애니메이션 최대 배속. 너무 크면 발이 다다닥 떨려 보인다 (전력 질주 클립이 없을 때)")]
+        [SerializeField] float maxLocomotionPlaybackSpeed = 1.6f;
 
         PlayerLocomotion locomotion;
         PlayerCombat combat;

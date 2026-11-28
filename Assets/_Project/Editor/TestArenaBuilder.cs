@@ -50,6 +50,15 @@ namespace SoulsHunter.EditorTools
         [MenuItem("SoulsHunter/Build Test Arena")]
         static void Build()
         {
+            // 타이틀 씬에 아레나가 섞여 들어가는 실수 막기
+            var active = EditorSceneManager.GetActiveScene();
+            if (active.name == "Title" || Object.FindAnyObjectByType<TitleScreen>())
+            {
+                EditorUtility.DisplayDialog("SoulsHunter",
+                    "지금 열린 씬이 타이틀 씬이에요.\n아레나는 게임 씬(test)을 연 뒤에 만들어 주세요.", "확인");
+                return;
+            }
+
             Undo.SetCurrentGroupName("Build Test Arena");
             int group = Undo.GetCurrentGroup();
 

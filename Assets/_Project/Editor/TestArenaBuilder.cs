@@ -33,7 +33,7 @@ namespace SoulsHunter.EditorTools
             "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack", "Apothecary", "Soul Altar", "Village", "Hunting Field", "Post Processing",
         };
 
-        static readonly Vector3 HubSpawn = new(0f, 0f, -4f);
+        static readonly Vector3 HubSpawn = new(0f, 0f, -9f);
         static readonly Vector3 ArenaCenter = new(0f, 0f, 200f);
         const float ArenaRadius = 23f;
 
@@ -141,18 +141,20 @@ namespace SoulsHunter.EditorTools
             hud.gameObject.AddComponent<InteractableMarkers>();
 
             // 안전구역 시설
-            BuildForge(new Vector3(5f, 0f, 2f));
-            BuildArmorBench(new Vector3(8f, 0f, -2f));
-            BuildApothecary(new Vector3(4f, 0f, -9f));
-            BuildSoulAltar(new Vector3(-4f, 0f, -9f));
+            BuildForge(new Vector3(10f, 0f, 3f));
+            BuildArmorBench(new Vector3(9f, 0f, -4.5f));
+            BuildApothecary(new Vector3(-9f, 0f, -4.5f));
+            BuildSoulAltar(new Vector3(0f, 0f, 1.5f));
             SetupProgression(player);
-            BuildQuestBoard(new Vector3(-4f, 0f, 3f));
-            BuildDepartureGate(new Vector3(0f, 0f, 11f));
+            BuildQuestBoard(new Vector3(-4.5f, 0f, 8f));
+            BuildDepartureGate(new Vector3(0f, 0f, 13f));
+            // 시설 정면이 광장 가운데를 보게 (관문·제단 제외)
+            foreach (var n in new[] { "Forge", "Armor Bench", "Apothecary", "Quest Board" }) FaceHubCenter(n);
 
             // 훈련장 허수아비 (안전구역 왼쪽)
             var training = Create("Training Ground");
-            Dummy(training.transform, "Dummy A", new Vector3(-10f, 0f, -3f), 1f, 150f, enemyMat);
-            Dummy(training.transform, "Dummy B", new Vector3(-12f, 0f, 1f), 1f, 150f, enemyMat);
+            Dummy(training.transform, "Dummy A", new Vector3(-11f, 0f, 2.5f), 1f, 150f, enemyMat);
+            Dummy(training.transform, "Dummy B", new Vector3(-10f, 0f, 6f), 1f, 150f, enemyMat);
 
             // 퀘스트와 투기장 몬스터
             EnvironmentBuilder.DressHubFacilities();
@@ -245,6 +247,17 @@ namespace SoulsHunter.EditorTools
             arr.GetArrayElementAtIndex(1).objectReferenceValue = eyeR.GetComponent<Renderer>();
             so.ApplyModifiedPropertiesWithoutUndo();
             return health;
+        }
+
+        /// <summary>시설의 정면(-Z쪽, 사람이 서는 쪽)이 광장 가운데를 보게 돌린다.</summary>
+        static void FaceHubCenter(string rootName)
+        {
+            var go = GameObject.Find(rootName);
+            if (!go) return;
+            var away = go.transform.position;
+            away.y = 0f;
+            if (away.sqrMagnitude < 0.01f) return;
+            go.transform.rotation = Quaternion.LookRotation(away.normalized);
         }
 
         static void BuildForge(Vector3 pos)

@@ -393,13 +393,12 @@ namespace SoulsHunter.EditorTools
             PaintTerrain(td, VillageSize, (x, z) =>
             {
                 var p = new Vector2(x, z);
-                float plaza = Smooth(10f, 7f, Vector2.Distance(p, new Vector2(0f, 0f)));
-                float road = Smooth(3.2f, 1.8f, DistToSegment(p, new Vector2(0f, -6f), new Vector2(0f, 16f), out _));
-                float side = Mathf.Max(
-                    Smooth(2.2f, 1.2f, DistToSegment(p, new Vector2(0f, 0f), new Vector2(6f, -8f), out _)),
-                    Smooth(2.2f, 1.2f, DistToSegment(p, new Vector2(0f, 0f), new Vector2(-6f, -8f), out _)));
-                float ring = Smooth(2.4f, 1.2f, Mathf.Abs(p.magnitude - 15f)) * 0.6f;
-                return Mathf.Max(plaza * 0.85f, road, side * 0.8f, ring);
+                float d = p.magnitude;
+                // 둥근 광장 (가운데 제단 둘레는 잔디 섬) + 남북으로 뻗은 큰길
+                float plaza = Smooth(13.5f, 11.5f, d) * Smooth(3f, 4.2f, Vector2.Distance(p, new Vector2(0f, 1.5f)));
+                float edge = Smooth(1.2f, 0.4f, Mathf.Abs(d - 12.5f)) * 0.35f; // 광장 테두리를 살짝 진하게
+                float road = Smooth(3.4f, 2.2f, DistToSegment(p, new Vector2(0f, -22f), new Vector2(0f, 22f), out _)) * Smooth(9f, 12f, d);
+                return Mathf.Max(plaza * 0.85f, road * 0.9f, edge);
             });
             var terrain = CreateTerrain(root.transform, td, new Vector3(-VillageSize * 0.5f, 0f, -VillageSize * 0.5f));
             Vector3 G(Vector2 p) => Ground(terrain, new Vector3(p.x, 0f, p.y));
@@ -439,19 +438,25 @@ namespace SoulsHunter.EditorTools
             // 길가 소품
             var props = new GameObject("Props").transform;
             props.SetParent(root.transform, false);
+            // 시설이 있는 광장(반지름 ~13) 바깥, 집 앞에 무리 지어 놓는다
             var clutter = new (string prefab, Vector2 pos, float yaw)[]
             {
-                ("Wooden_Cart", new(-9f, 12f), 30f), ("Wooden_Barrel", new(-11.5f, 9f), 0f), ("Wooden_Barrel", new(-12.3f, 10.2f), 50f),
-                ("Wooden_Bucket", new(10f, 10f), 0f), ("Wood_Tyre", new(11.4f, 11f), 70f), ("Wooden_Barrel", new(13f, -12f), 20f),
-                ("Wooden_Spinning_Wheel", new(-13f, -12f), 150f), ("Stump_A", new(-8f, -1.5f), 0f), ("Wooden_Tub", new(-14f, -4f), 0f),
-                ("Wooden_Table", new(-6.5f, 4.5f), 90f),
+                // 동쪽 대장간 집 앞
+                ("Wooden_Barrel", new(15.5f, 6f), 0f), ("Wooden_Barrel", new(16.3f, 7.2f), 40f), ("Wood_Tyre", new(15.5f, -1f), 80f),
+                // 남쪽 선술집 앞
+                ("Wooden_Table", new(4.5f, -16.5f), 0f), ("Wooden_Bucket", new(6f, -17f), 0f), ("Wooden_Barrel", new(-4.5f, -16.8f), 10f),
+                // 서쪽 축사 앞
+                ("Wooden_Cart", new(-16f, -8f), 60f), ("Wooden_Tub", new(-16.5f, -2.5f), 0f), ("Stump_A", new(-15f, 9f), 0f),
+                // 북쪽 관문 옆
+                ("Wooden_Spinning_Wheel", new(10.5f, 13.5f), 200f), ("Wooden_Cart", new(-10.5f, 14f), -20f),
             };
             foreach (var (prefab, pos, yaw) in clutter) PlaceVillageProp(prefab, props, G(pos), yaw);
 
             // 등불
             var lampMat = Glow(new Color(1f, 0.75f, 0.4f), 3f);
-            foreach (var p in new[] { new Vector2(-4f, -14f), new Vector2(4f, -14f), new Vector2(-3f, 9f), new Vector2(3f, 9f), new Vector2(-14f, 2f), new Vector2(14f, 2f) })
-                Lantern(props, G(p), lampMat);
+            // 광장 둘레에 같은 간격으로 6개 (관문 양옆 포함)
+            for (int i = 0; i < 6; i++)
+                Lantern(props, G((Vector2)(Quaternion.Euler(0f, 0f, -(30f + i * 60f)) * Vector2.up) * 13.5f), lampMat);
 
             // 보이지 않는 경계 (마을 밖으로 못 나가게)
             var bounds = new GameObject("Boundary").transform;

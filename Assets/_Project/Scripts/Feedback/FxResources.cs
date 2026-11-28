@@ -55,13 +55,29 @@ namespace SoulsHunter.Feedback
             return tex;
         }
 
+        /// <summary>빌드에 셰이더가 빠지지 않도록 Resources/FX에 저장해 두는 머티리얼 (에디터가 자동으로 만든다)</summary>
+        public static readonly (string name, bool additive)[] Templates =
+        {
+            ("FX Additive", true), ("FX Alpha", false), ("FX Ring", true), ("FX Trail", true),
+        };
+
         static Material Make(Texture2D tex, bool additiveBlend, string name)
+        {
+            // 빌드에서는 Shader.Find가 셰이더를 못 찾을 수 있어서, 저장해 둔 머티리얼을 먼저 쓴다
+            var template = Resources.Load<Material>("FX/" + name);
+            var m = template ? new Material(template) : CreateTemplate(additiveBlend, name);
+            m.name = name;
+            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
+            m.mainTexture = tex;
+            return m;
+        }
+
+        /// <summary>텍스처 없이 셰이더·반투명 설정만 한 머티리얼</summary>
+        public static Material CreateTemplate(bool additiveBlend, string name)
         {
             var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
             if (!shader) shader = Shader.Find("Sprites/Default");
             var m = new Material(shader) { name = name };
-            if (m.HasProperty("_BaseMap")) m.SetTexture("_BaseMap", tex);
-            m.mainTexture = tex;
 
             if (m.HasProperty("_Surface"))
             {

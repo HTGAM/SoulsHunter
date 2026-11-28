@@ -608,7 +608,7 @@ namespace SoulsHunter.EditorTools
         /// 발끝 뼈가 바닥에 닿게 하려고 쓴다. 실패하면 +무한대.
         /// (메시 범위는 실제보다 넓게 잡혀 있는 경우가 많아서 뼈로 본다)
         /// </summary>
-        static float LowestPointInPose(Transform root, GameObject model, AnimationClip clip)
+        internal static float LowestPointInPose(Transform root, GameObject model, AnimationClip clip)
         {
             var bones = new HashSet<Transform>();
             foreach (var skin in model.GetComponentsInChildren<SkinnedMeshRenderer>())
@@ -638,7 +638,7 @@ namespace SoulsHunter.EditorTools
         }
 
         /// <summary>모델의 보이는 범위 (루트 기준 좌표)</summary>
-        static Bounds LocalBounds(Transform root, GameObject model)
+        internal static Bounds LocalBounds(Transform root, GameObject model)
         {
             var renderers = model.GetComponentsInChildren<Renderer>();
             bool any = false;

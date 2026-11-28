@@ -18,7 +18,7 @@ namespace SoulsHunter.UI
         [SerializeField] PlayerInputHandler input;
 
         GameObject root, mainPanel, controlsPanel;
-        Button resumeButton, controlsButton, abandonButton, quitButton, controlsBackButton;
+        Button resumeButton, controlsButton, abandonButton, titleButton, quitButton, controlsBackButton;
         Font font;
 
         const string ControlsText =
@@ -68,8 +68,13 @@ namespace SoulsHunter.UI
             root.SetActive(true);
             bool hunting = HuntManager.Instance && HuntManager.Instance.CurrentPhase == HuntManager.Phase.Hunting;
             abandonButton.gameObject.SetActive(hunting);
-            if (hunting) Chain(resumeButton, controlsButton, abandonButton, quitButton);
-            else Chain(resumeButton, controlsButton, quitButton);
+            bool hasTitle = Application.CanStreamedLevelBeLoaded(TitleScene);
+            titleButton.gameObject.SetActive(hasTitle);
+            var order = new System.Collections.Generic.List<Button> { resumeButton, controlsButton };
+            if (hunting) order.Add(abandonButton);
+            if (hasTitle) order.Add(titleButton);
+            order.Add(quitButton);
+            Chain(order.ToArray());
             ShowControls(false);
             Cursor.lockState = CursorLockMode.None;
             Cursor.visible = true;
@@ -106,6 +111,17 @@ namespace SoulsHunter.UI
 #else
             Application.Quit();
 #endif
+        }
+
+        const string TitleScene = "Title";
+
+        void SaveAndReturnToTitle()
+        {
+            var player = GameObject.FindWithTag("Player");
+            if (player && player.TryGetComponent(out SaveSystem save)) save.Save();
+            GameState.SetPaused(false);
+            GameState.QuestActive = false;
+            UnityEngine.SceneManagement.SceneManager.LoadScene(TitleScene);
         }
 
         static void Select(Button b)
@@ -158,6 +174,7 @@ namespace SoulsHunter.UI
             resumeButton = MakeButton(mr, "계속하기", Resume);
             controlsButton = MakeButton(mr, "조작법", () => ShowControls(true));
             abandonButton = MakeButton(mr, "퀘스트 포기", AbandonQuest);
+            titleButton = MakeButton(mr, "저장하고 타이틀로", SaveAndReturnToTitle);
             quitButton = MakeButton(mr, "저장하고 종료", SaveAndQuit);
             Chain(resumeButton, controlsButton, quitButton);
 

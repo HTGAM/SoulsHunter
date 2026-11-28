@@ -327,7 +327,29 @@ namespace SoulsHunter.EditorTools
         // ───────── 머티리얼 ─────────
 
         /// <summary>기본(Built-in) 셰이더 머티리얼을 URP Lit으로 바꾼다 (안 바꾸면 분홍색으로 보임)</summary>
-        static void ConvertMaterials(GameObject prefab)
+        /// <summary>예전 파티클 셰이더(Legacy Particles) → URP Particles/Unlit (가산/반투명)</summary>
+        static void ConvertParticle(Material m)
+        {
+            var shader = Shader.Find("Universal Render Pipeline/Particles/Unlit");
+            if (!shader) return;
+            var tex = m.HasProperty("_MainTex") ? m.GetTexture("_MainTex") : null;
+            var tint = m.HasProperty("_TintColor") ? m.GetColor("_TintColor") * 2f : m.HasProperty("_Color") ? m.GetColor("_Color") : Color.white;
+            bool additive = m.shader.name.Contains("Additive");
+            m.shader = shader;
+            m.SetTexture("_BaseMap", tex);
+            m.SetColor("_BaseColor", tint);
+            m.SetFloat("_Surface", 1f);
+            m.SetFloat("_Blend", additive ? 2f : 0f);
+            m.SetFloat("_ZWrite", 0f);
+            m.SetFloat("_SrcBlend", additive ? (float)UnityEngine.Rendering.BlendMode.One : (float)UnityEngine.Rendering.BlendMode.SrcAlpha);
+            m.SetFloat("_DstBlend", additive ? (float)UnityEngine.Rendering.BlendMode.One : (float)UnityEngine.Rendering.BlendMode.OneMinusSrcAlpha);
+            m.EnableKeyword("_SURFACE_TYPE_TRANSPARENT");
+            m.renderQueue = (int)UnityEngine.Rendering.RenderQueue.Transparent;
+            m.SetOverrideTag("RenderType", "Transparent");
+            EditorUtility.SetDirty(m);
+        }
+
+        internal static void ConvertMaterials(GameObject prefab)
         {
             var lit = Shader.Find("Universal Render Pipeline/Lit");
             if (!lit) return;
@@ -336,6 +358,7 @@ namespace SoulsHunter.EditorTools
                 {
                     if (!m || m.shader.name.StartsWith("Universal Render Pipeline")) continue;
                     if (!AssetDatabase.Contains(m)) continue;
+                    if (m.shader.name.Contains("Particle")) { ConvertParticle(m); continue; }
 
                     Texture Tex(string n) => m.HasProperty(n) ? m.GetTexture(n) : null;
                     float F(string n, float d) => m.HasProperty(n) ? m.GetFloat(n) : d;

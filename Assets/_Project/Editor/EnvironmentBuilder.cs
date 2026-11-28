@@ -602,9 +602,97 @@ namespace SoulsHunter.EditorTools
             var props = new GameObject("Facility Props").transform;
             props.SetParent(village.transform, false);
             Vector3 G(Vector2 p) => new(p.x, 0f, p.y); // 마을 가운데는 평평 (높이 0)
-            DressFacility("Forge", "Anvil", props, G, new[] { ("Anvil", new Vector2(0f, 0f), 90f), ("Blacksmith_Table", new Vector2(-1.8f, 1.6f), 0f), ("Hammer", new Vector2(1.9f, -1.6f), 30f), ("Smoker", new Vector2(-2f, -1.5f), 0f) });
-            DressFacility("Armor Bench", "", props, G, new[] { ("Wooden_Table", new Vector2(0f, 0f), 0f), ("Weapon_Stand", new Vector2(-1.8f, 1.2f), 0f), ("Shield", new Vector2(2f, 1.4f), 0f), ("Sword", new Vector2(2.4f, 0.6f), 0f), ("Spear", new Vector2(-2.4f, -0.8f), 0f) });
+            if (HasForgePack)
+            {
+                // 대장간 팩: 화로·모루·풀무·담금질 통·공구 걸이 / 큰 작업대·무기 걸이·방패
+                BuildForgeStation(props);
+                BuildArmorStation(props);
+            }
+            else
+            {
+                DressFacility("Forge", "Anvil", props, G, new[] { ("Anvil", new Vector2(0f, 0f), 90f), ("Blacksmith_Table", new Vector2(-1.8f, 1.6f), 0f), ("Hammer", new Vector2(1.9f, -1.6f), 30f), ("Smoker", new Vector2(-2f, -1.5f), 0f) });
+                DressFacility("Armor Bench", "", props, G, new[] { ("Wooden_Table", new Vector2(0f, 0f), 0f), ("Weapon_Stand", new Vector2(-1.8f, 1.2f), 0f), ("Shield", new Vector2(2f, 1.4f), 0f), ("Sword", new Vector2(2.4f, 0.6f), 0f), ("Spear", new Vector2(-2.4f, -0.8f), 0f) });
+            }
             DressFacility("Apothecary", null, props, G, new[] { ("Pot_1", new Vector2(1.4f, -1.2f), 0f), ("Pot_2", new Vector2(-1.5f, -1.3f), 0f), ("Wooden_Bucket", new Vector2(1.9f, 0.4f), 0f) });
+        }
+
+        // ───────── 대장간 팩 (3DForge Blacksmith's Forge) ─────────
+
+        const string ForgePack = "Assets/3DForge";
+
+        static GameObject Fg(string name)
+        {
+            if (!AssetDatabase.IsValidFolder(ForgePack)) return null;
+            foreach (var guid in AssetDatabase.FindAssets($"{name} t:Prefab", new[] { ForgePack }))
+            {
+                string path = AssetDatabase.GUIDToAssetPath(guid);
+                if (System.IO.Path.GetFileNameWithoutExtension(path) == name) return AssetDatabase.LoadAssetAtPath<GameObject>(path);
+            }
+            return null;
+        }
+
+        public static bool HasForgePack => Fg("fi_vil_forge_anvil") != null;
+
+        /// <summary>시설 기준 로컬 위치(앞 = -Z, 광장 쪽)에 대장간 팩 모델을 놓는다. 크기는 min~max 사이로 맞춘다.</summary>
+        static GameObject PlaceAt(Transform facility, Transform parent, string prefabName, Vector3 local, float yaw, float minSize, float maxSize)
+        {
+            var prefab = Fg(prefabName);
+            if (!prefab) return null;
+            MonsterModelSetup.ConvertMaterials(prefab);
+            var go = (GameObject)PrefabUtility.InstantiatePrefab(prefab, parent);
+            go.transform.SetPositionAndRotation(facility.TransformPoint(local), prefab.transform.rotation);
+            if (go.GetComponentInChildren<Collider>() == null)
+            {
+                var b = LocalBounds(go);
+                if (b.size.sqrMagnitude > 0.01f)
+                {
+                    var box = go.AddComponent<BoxCollider>();
+                    box.center = b.center;
+                    box.size = b.size;
+                }
+            }
+            go.transform.rotation = Quaternion.Euler(0f, facility.eulerAngles.y + yaw, 0f) * prefab.transform.rotation;
+            FitFootprint(go, minSize, maxSize);
+            // 바닥에 닿게 (모델 원점이 바닥이 아닐 수 있다)
+            var wb = WorldBounds(go);
+            go.transform.position += Vector3.up * (facility.position.y + local.y - wb.min.y);
+            return go;
+        }
+
+        static void HideFacilityShapes(GameObject facility)
+        {
+            foreach (var r in facility.GetComponentsInChildren<MeshRenderer>()) r.enabled = false;
+        }
+
+        /// <summary>대장간: 뒤쪽 화덕, 앞쪽 모루(플레이어가 서는 곳), 옆에 풀무·담금질 통·공구 상자·의자</summary>
+        static void BuildForgeStation(Transform parent)
+        {
+            var forge = GameObject.Find("Forge");
+            if (!forge) return;
+            HideFacilityShapes(forge);
+            var t = forge.transform;
+            PlaceAt(t, parent, "fi_vil_forge_forge3_lit", new Vector3(0f, 0f, 1.1f), 0f, 1.6f, 2.6f);
+            PlaceAt(t, parent, "fi_vil_forge_anvil", new Vector3(0f, 0f, -0.9f), 90f, 0.7f, 1.2f);
+            PlaceAt(t, parent, "fi_vil_forge_bellow2", new Vector3(1.7f, 0f, 1.2f), -90f, 0.8f, 1.6f);
+            PlaceAt(t, parent, "fi_vil_forge_coolingbath_large2", new Vector3(-1.9f, 0f, 0.3f), 90f, 1f, 1.8f);
+            PlaceAt(t, parent, "fi_vil_forge_toolbox_full", new Vector3(1.7f, 0f, -1.0f), 20f, 0.5f, 1f);
+            PlaceAt(t, parent, "fi_vil_forge_stool1", new Vector3(-0.9f, 0f, -1.7f), 0f, 0.3f, 0.6f);
+            // 불빛은 화덕 위로
+            var light = t.Find("Forge Light");
+            if (light) light.position = t.TransformPoint(new Vector3(0f, 1.6f, 1.1f));
+        }
+
+        /// <summary>방어구 작업대: 가운데 큰 작업대, 양옆 무기·갑옷 걸이, 앞에 상자</summary>
+        static void BuildArmorStation(Transform parent)
+        {
+            var bench = GameObject.Find("Armor Bench");
+            if (!bench) return;
+            HideFacilityShapes(bench);
+            var t = bench.transform;
+            PlaceAt(t, parent, "fi_vil_forge_workbensh_large1", new Vector3(0f, 0f, 0.5f), 0f, 1.8f, 3f);
+            PlaceAt(t, parent, "fi_vil_forge_weaponrack3_full", new Vector3(-2.3f, 0f, 0.6f), 90f, 1.2f, 2.2f);
+            PlaceAt(t, parent, "fi_vil_forge_weaponrack4", new Vector3(2.3f, 0f, 0.6f), -90f, 1.2f, 2.2f);
+            PlaceAt(t, parent, "fi_vil_forge_crate_small", new Vector3(-1.4f, 0f, -0.9f), 15f, 0.5f, 0.9f);
         }
 
         static void DressFacility(string rootName, string hidePrefix, Transform parent, System.Func<Vector2, Vector3> ground, (string prefab, Vector2 offset, float yaw)[] items)

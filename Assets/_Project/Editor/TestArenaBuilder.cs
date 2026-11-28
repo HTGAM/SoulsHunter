@@ -158,6 +158,7 @@ namespace SoulsHunter.EditorTools
 
             // 퀘스트와 투기장 몬스터
             EnvironmentBuilder.DressHubFacilities();
+            EnvironmentBuilder.SkinRemainingShapes();
             EnvironmentBuilder.SetupPostProcessing(Create);
             BuildHuntContent(arenaSpawn, field, enemyMat, weakMat);
             // 에셋스토어 몬스터 모델이 있으면 도형 대신 입힌다

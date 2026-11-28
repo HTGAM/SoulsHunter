@@ -616,6 +616,138 @@ namespace SoulsHunter.EditorTools
             DressFacility("Apothecary", null, props, G, new[] { ("Pot_1", new Vector2(1.4f, -1.2f), 0f), ("Pot_2", new Vector2(-1.5f, -1.3f), 0f), ("Wooden_Bucket", new Vector2(1.9f, 0.4f), 0f) });
         }
 
+        // ───────── 도형에 질감 입히기 ─────────
+
+        enum Surface { Wood, Stone, Sand, Straw }
+
+        static readonly Dictionary<string, Material> texturedCache = new();
+
+        static (Texture2D albedo, Texture2D normal) SurfaceTextures(Surface s)
+        {
+            string mvTex = "Assets/MyDreamGameStudio/Medieval Village Pack Vol.1/Textures/";
+            Texture2D T(string p) => AssetDatabase.LoadAssetAtPath<Texture2D>(p);
+            return s switch
+            {
+                Surface.Wood => (T(mvTex + "Blacksmith_Plank_BaseColor.png"), T(mvTex + "Blacksmith_Plank_Normal.png")),
+                Surface.Straw => (T(mvTex + "Animal_Shed_Roof_BaseColor.png"), T(mvTex + "Animal_Shed_Roof_Normal.png")),
+                Surface.Sand => (T(TerrainTex + "Texture_Dirt_Diffuse.png"), T(TerrainTex + "Texture_Dirt_Normal.png")),
+                _ => (T(TerrainTex + "Texture_Rock_Diffuse.png"), T(TerrainTex + "Texure_Rock_Normal.png")),
+            };
+        }
+
+        /// <summary>질감 재질 (크기별 타일링마다 하나씩 에셋으로 저장해 재사용)</summary>
+        static Material Textured(Surface s, Vector2 tiling, Color tint)
+        {
+            tiling = new Vector2(Mathf.Max(1f, Mathf.Round(tiling.x * 2f) / 2f), Mathf.Max(1f, Mathf.Round(tiling.y * 2f) / 2f));
+            string key = $"{s}_{tiling.x:0.#}x{tiling.y:0.#}";
+            if (texturedCache.TryGetValue(key, out var cached) && cached) return cached;
+
+            string folder = DataFolder + "/Materials";
+            if (!AssetDatabase.IsValidFolder(DataFolder)) AssetDatabase.CreateFolder("Assets/_Project/Data", "Environment");
+            if (!AssetDatabase.IsValidFolder(folder)) AssetDatabase.CreateFolder(DataFolder, "Materials");
+            string path = $"{folder}/{key}.mat";
+            var m = AssetDatabase.LoadAssetAtPath<Material>(path);
+            if (!m)
+            {
+                m = new Material(LitShader);
+                AssetDatabase.CreateAsset(m, path);
+            }
+            var (albedo, normal) = SurfaceTextures(s);
+            m.SetTexture("_BaseMap", albedo);
+            m.SetTextureScale("_BaseMap", tiling);
+            m.SetColor("_BaseColor", tint);
+            if (normal)
+            {
+                m.SetTexture("_BumpMap", normal);
+                m.SetTextureScale("_BumpMap", tiling);
+                m.EnableKeyword("_NORMALMAP");
+            }
+            m.SetFloat("_Smoothness", s == Surface.Stone ? 0.15f : 0.1f);
+            m.SetFloat("_Metallic", 0f);
+            EditorUtility.SetDirty(m);
+            texturedCache[key] = m;
+            return m;
+        }
+
+        /// <summary>도형 크기에 맞춰 타일링을 정하고 질감 재질을 입힌다 (tile = 텍스처 한 장이 덮는 길이 m)</summary>
+        static void Skin(Renderer r, Surface s, float tile, Color? tint = null)
+        {
+            if (!r || !r.TryGetComponent(out MeshFilter mf) || !mf.sharedMesh) return;
+            var sc = r.transform.lossyScale;
+            string mesh = mf.sharedMesh.name;
+            Vector2 tiling = mesh switch
+            {
+                "Cylinder" or "Capsule" => new Vector2(Mathf.PI * Mathf.Max(sc.x, sc.z) / tile, 2f * sc.y / tile),
+                "Plane" => new Vector2(10f * sc.x / tile, 10f * sc.z / tile),
+                _ => new Vector2(Mathf.Max(sc.x, sc.z) / tile, sc.y / tile),
+            };
+            r.sharedMaterial = Textured(s, tiling, tint ?? Color.white);
+        }
+
+        static void SkinChildren(string rootName, System.Func<string, (Surface s, float tile)?> pick)
+        {
+            var root = GameObject.Find(rootName);
+            if (!root) return;
+            foreach (var r in root.GetComponentsInChildren<MeshRenderer>(true))
+            {
+                var choice = pick(r.name);
+                if (choice.HasValue) Skin(r, choice.Value.s, choice.Value.tile);
+            }
+        }
+
+        /// <summary>
+        /// 아직 도형으로 남은 물건들에 나무·돌·모래 질감을 입히고, 허수아비는 나무 기둥 + 짚 몸통으로 다시 만든다.
+        /// 마을·투기장을 모두 만든 뒤에 부른다.
+        /// </summary>
+        public static void SkinRemainingShapes()
+        {
+            if (!HasVillage || !HasNature) return;
+            texturedCache.Clear();
+
+            SkinChildren("Quest Board", n => n.StartsWith("Post") || n == "Board" ? (Surface.Wood, 1.2f) : null);
+            SkinChildren("Departure Gate", n => n.StartsWith("Pillar") || n == "Lintel" ? (Surface.Stone, 2f) : null);
+            SkinChildren("Soul Altar", n => n is "Base" or "Pillar" or "Bowl" ? (Surface.Stone, 1.2f) : null);
+            SkinChildren("Apothecary", n => n == "Shelf" ? (Surface.Wood, 1.2f) : null);
+            SkinChildren("Village", n => n == "Pole" ? (Surface.Wood, 1f) : null);
+            SkinChildren("Colosseum", n => n switch
+            {
+                "Floor" or "Sand Circle" => (Surface.Sand, 5f),
+                "Wall" => (Surface.Stone, 3f),
+                "Pillar" => (Surface.Stone, 2f),
+                _ => null,
+            });
+
+            // 허수아비: 캡슐(판정·체력용)은 숨기고 기둥·짚 몸통·팔·머리를 붙인다
+            var training = GameObject.Find("Training Ground");
+            if (training)
+                foreach (Transform dummy in training.transform)
+                {
+                    if (dummy.TryGetComponent(out MeshRenderer body)) body.enabled = false;
+                    var old = dummy.Find("Dummy Look");
+                    if (old) Object.DestroyImmediate(old.gameObject);
+                    var look = new GameObject("Dummy Look").transform;
+                    look.SetParent(dummy, false);
+                    void Piece(PrimitiveType type, string name, Vector3 pos, Vector3 euler, Vector3 scale, Surface s, float tile)
+                    {
+                        var go = GameObject.CreatePrimitive(type);
+                        Object.DestroyImmediate(go.GetComponent<Collider>());
+                        go.name = name;
+                        go.transform.SetParent(look, false);
+                        go.transform.localPosition = pos;
+                        go.transform.localRotation = Quaternion.Euler(euler);
+                        go.transform.localScale = scale;
+                        Skin(go.GetComponent<Renderer>(), s, tile);
+                    }
+                    // 캡슐 중심 기준 (바닥 = -1)
+                    Piece(PrimitiveType.Cylinder, "Post", new Vector3(0f, -0.45f, 0f), Vector3.zero, new Vector3(0.14f, 0.55f, 0.14f), Surface.Wood, 0.6f);
+                    Piece(PrimitiveType.Capsule, "Straw Body", new Vector3(0f, 0.15f, 0f), Vector3.zero, new Vector3(0.6f, 0.45f, 0.48f), Surface.Straw, 0.6f);
+                    Piece(PrimitiveType.Cylinder, "Arms", new Vector3(0f, 0.38f, 0f), new Vector3(0f, 0f, 90f), new Vector3(0.09f, 0.62f, 0.09f), Surface.Wood, 0.6f);
+                    Piece(PrimitiveType.Sphere, "Straw Head", new Vector3(0f, 0.85f, 0f), Vector3.zero, Vector3.one * 0.38f, Surface.Straw, 0.5f);
+                    // 맞은 부위 깜빡임이 새 조각에도 보이게 TrainingDummy가 다시 찾는다 (Awake에서 자식 렌더러 수집)
+                }
+            AssetDatabase.SaveAssets();
+        }
+
         // ───────── 대장간 팩 (3DForge Blacksmith's Forge) ─────────
 
         const string ForgePack = "Assets/3DForge";

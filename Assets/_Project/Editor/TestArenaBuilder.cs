@@ -30,7 +30,7 @@ namespace SoulsHunter.EditorTools
         {
             "Arena", "Bonfire", "Dummies",
             "Player", "LockOnMarker", "HUD", "Forge", "Armor Bench", "Quest Board",
-            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack", "Apothecary", "Soul Altar", "Village", "Hunting Field",
+            "Hub", "Colosseum", "Arena Enemies", "Hunt Manager", "Departure Gate", "Training Ground", "Weapon Rack", "Apothecary", "Soul Altar", "Village", "Hunting Field", "Post Processing",
         };
 
         static readonly Vector3 HubSpawn = new(0f, 0f, -4f);
@@ -155,6 +155,7 @@ namespace SoulsHunter.EditorTools
 
             // 퀘스트와 투기장 몬스터
             EnvironmentBuilder.DressHubFacilities();
+            EnvironmentBuilder.SetupPostProcessing(Create);
             BuildHuntContent(arenaSpawn, field, enemyMat, weakMat);
             // 에셋스토어 몬스터 모델이 있으면 도형 대신 입힌다
             MonsterModelSetup.ApplyToScene(out _);
@@ -783,6 +784,8 @@ namespace SoulsHunter.EditorTools
             });
             // 무기는 한손검 하나만 사용 (다른 무기 에셋은 남겨둠)
             var sword = WeaponPresets.GetOrCreateAll()[0];
+            // 마을 팩이 있으면 진짜 검·방패 모델을 쓴다
+            if (EnvironmentBuilder.V("Sword")) { sword.rightModel = EnvironmentBuilder.V("Sword"); sword.leftModel = EnvironmentBuilder.V("Shield"); EditorUtility.SetDirty(sword); }
             weapon.EditorSetupWeapons(new List<WeaponData> { sword }, sword);
             EditorUtility.SetDirty(weapon);
             player.AddComponent<PlayerWeaponSpecial>();

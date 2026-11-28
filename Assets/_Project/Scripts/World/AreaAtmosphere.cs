@@ -70,8 +70,11 @@ namespace SoulsHunter.World
             RenderSettings.fogColor = fogColor;
             RenderSettings.fogStartDistance = fogStart;
             RenderSettings.fogEndDistance = fogEnd;
-            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Flat;
-            RenderSettings.ambientLight = ambientColor;
+            // 하늘(위)·지평선·땅(아래)으로 나눈 주변광: 아래쪽이 어두워서 입체감이 산다
+            RenderSettings.ambientMode = UnityEngine.Rendering.AmbientMode.Trilight;
+            RenderSettings.ambientSkyColor = ambientColor * 1.1f;
+            RenderSettings.ambientEquatorColor = Color.Lerp(ambientColor, fogColor, 0.4f) * 0.85f;
+            RenderSettings.ambientGroundColor = ambientColor * 0.4f;
 
             if (!sun) sun = RenderSettings.sun;
             if (!sun)

@@ -5,6 +5,8 @@ using UnityEngine;
 using Unity.AI.Navigation;
 using SoulsHunter.Core;
 using SoulsHunter.World;
+using UnityEngine.Rendering;
+using UnityEngine.Rendering.Universal;
 
 namespace SoulsHunter.EditorTools
 {
@@ -50,7 +52,7 @@ namespace SoulsHunter.EditorTools
         static GameObject[] Bushes => Many(UNS + "Vegetation/Bushes/Prefabs/UNS_Bush.prefab");
         static GameObject[] Logs => Many(UNS + "Props/Logs/Prefabs/UNS_Log.prefab", UNS + "Props/Logs/Prefabs/UNS_Stump.prefab", UNS + "Props/Branches/Prefabs/UNS_Branch.prefab");
         static GameObject Mushrooms => P(UNS + "Vegetation/Mushrooms/Prefabs/UNS_Mushroom_Patch.prefab");
-        static GameObject V(string name) => P($"{MV}{name}_URP.prefab");
+        public static GameObject V(string name) => P($"{MV}{name}_URP.prefab");
 
         static Material Sky(string path) => AssetDatabase.LoadAssetAtPath<Material>(SKY + path);
 
@@ -83,8 +85,8 @@ namespace SoulsHunter.EditorTools
 
         static readonly Zone Camp = new() { name = "베이스캠프", c = new(0f, -88f), r = 11f, floor = 6f, dirt = 0.7f };
         static readonly Zone Glade = new() { name = "숲속 공터", c = new(0f, -24f), r = 21f, floor = 5f, dirt = 0.3f };
-        static readonly Zone Gorge = new() { name = "바위 협곡", c = new(52f, 50f), r = 21f, floor = 4f, dirt = 0.65f, wall = 16f };
-        static readonly Zone Basin = new() { name = "잿불 분지", c = new(-52f, 54f), r = 25f, floor = 3f, dirt = 1f, wall = 7f };
+        static readonly Zone Gorge = new() { name = "바위 협곡", c = new(52f, 50f), r = 21f, floor = 4f, dirt = 0.65f, wall = 9f };
+        static readonly Zone Basin = new() { name = "잿불 분지", c = new(-52f, 54f), r = 25f, floor = 3f, dirt = 1f, wall = 4.5f };
         static Zone[] FieldZones => new[] { Camp, Glade, Gorge, Basin };
         static (Zone a, Zone b)[] FieldPaths => new[] { (Camp, Glade), (Glade, Gorge), (Glade, Basin) };
 
@@ -216,7 +218,7 @@ namespace SoulsHunter.EditorTools
             }
 
             // 바위 협곡: 둘레 절벽 + 안쪽 엄폐 바위
-            RingOfCliffs(Gorge, props, G, rng, 14);
+            RingOfCliffs(Gorge, props, G, rng, 24, 1.35f);
             for (int i = 0; i < 3; i++)
             {
                 var p = Gorge.c + (Vector2)(Quaternion.Euler(0f, 0f, i * 120f + 30f) * Vector2.up) * 10f;
@@ -224,7 +226,7 @@ namespace SoulsHunter.EditorTools
             }
 
             // 잿불 분지: 낮은 바위 테두리 + 검은 바위 + 불씨
-            RingOfCliffs(Basin, props, G, rng, 10, 0.7f);
+            RingOfCliffs(Basin, props, G, rng, 18, 0.8f);
             for (int i = 0; i < 4; i++)
             {
                 var p = Basin.c + (Vector2)(Quaternion.Euler(0f, 0f, i * 90f + 45f) * Vector2.up) * Rand(rng, 12f, 17f);
@@ -262,8 +264,11 @@ namespace SoulsHunter.EditorTools
                 float a = i * 360f / count + Rand(rng, -6f, 6f);
                 var dir = (Vector2)(Quaternion.Euler(0f, 0f, a) * Vector2.up);
                 if (Vector2.Angle(dir, zn.entrance) < 32f) continue; // 입구는 비운다
-                var p = zn.c + dir * (zn.r + Rand(rng, 4f, 7f));
-                var go = Place(Pick(cliffs, rng), parent, ground(p) - Vector3.up * 1.5f, 0f, scale * Rand(rng, 0.9f, 1.3f));
+                var p = zn.c + dir * (zn.r + Rand(rng, 3.5f, 5.5f));
+                var go = Place(Pick(cliffs, rng), parent, ground(p) - Vector3.up * 1.2f, 0f, 1f);
+                // 둘레를 빈틈없이 덮도록 폭을 맞추고, 위로 조금 늘려 벽처럼 보이게
+                FitSize(go, 2f * Mathf.PI * (zn.r + 5f) / count * 1.6f * Rand(rng, 0.9f, 1.15f));
+                go.transform.localScale = Vector3.Scale(go.transform.localScale, new Vector3(1f, scale, 1f));
                 // 절벽 면이 구역 안쪽을 보게
                 var inward = new Vector3(-dir.x, 0f, -dir.y);
                 go.transform.rotation = Quaternion.LookRotation(inward) * Quaternion.Euler(0f, Rand(rng, -20f, 20f), 0f) * go.transform.rotation;
@@ -432,6 +437,65 @@ namespace SoulsHunter.EditorTools
             atmo.EditorSetup("마을", 140f, Sky("Panoramics/FS002/FS002_Day.mat"), new Color(0.7f, 0.74f, 0.78f), 60f, 240f,
                              new Color(0.58f, 0.6f, 0.62f), new Vector2(42f, 30f), new Color(1f, 0.95f, 0.86f), 1.3f);
             return true;
+        }
+
+        // ───────── 화면 효과 ─────────
+
+        const string PostFxPath = DataFolder + "/GamePostFX.asset";
+
+        /// <summary>
+        /// 전체 화면 효과: 톤매핑(ACES)·블룸·색 보정·비네트 + 카메라 후처리와 SMAA 안티앨리어싱.
+        /// 프로필 에셋은 처음 한 번만 만든다 (직접 고친 값 유지).
+        /// </summary>
+        public static void SetupPostProcessing(System.Func<string, GameObject> create)
+        {
+            if (!AssetDatabase.IsValidFolder(DataFolder)) AssetDatabase.CreateFolder("Assets/_Project/Data", "Environment");
+            var profile = AssetDatabase.LoadAssetAtPath<VolumeProfile>(PostFxPath);
+            if (!profile)
+            {
+                profile = ScriptableObject.CreateInstance<VolumeProfile>();
+                AssetDatabase.CreateAsset(profile, PostFxPath);
+
+                var tone = profile.Add<Tonemapping>(true);
+                tone.mode.Override(TonemappingMode.ACES);
+
+                var bloom = profile.Add<Bloom>(true);
+                bloom.threshold.Override(1.05f);
+                bloom.intensity.Override(0.55f);
+                bloom.scatter.Override(0.65f);
+
+                var color = profile.Add<ColorAdjustments>(true);
+                color.postExposure.Override(0.25f);
+                color.contrast.Override(14f);
+                color.saturation.Override(6f);
+
+                var lift = profile.Add<LiftGammaGain>(true);
+                lift.lift.Override(new Vector4(1f, 0.99f, 1.02f, -0.02f));
+                lift.gain.Override(new Vector4(1.02f, 1f, 0.97f, 0f));
+
+                var vignette = profile.Add<Vignette>(true);
+                vignette.intensity.Override(0.25f);
+                vignette.smoothness.Override(0.4f);
+
+                foreach (var c in profile.components) AssetDatabase.AddObjectToAsset(c, profile);
+                EditorUtility.SetDirty(profile);
+                AssetDatabase.SaveAssets();
+            }
+
+            var go = create("Post Processing");
+            var volume = go.AddComponent<Volume>();
+            volume.isGlobal = true;
+            volume.priority = 1f;
+            volume.sharedProfile = profile;
+
+            foreach (var cam in Object.FindObjectsByType<Camera>(FindObjectsSortMode.None))
+            {
+                var data = cam.GetUniversalAdditionalCameraData();
+                data.renderPostProcessing = true;
+                data.antialiasing = AntialiasingMode.SubpixelMorphologicalAntiAliasing;
+                data.antialiasingQuality = AntialiasingQuality.High;
+                EditorUtility.SetDirty(data);
+            }
         }
 
         /// <summary>투기장 분위기 (해질녘)</summary>

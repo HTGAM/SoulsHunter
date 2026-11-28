@@ -101,8 +101,78 @@ namespace SoulsHunter.Player
                     else if (!blade || part.scale.z > bladeLength) { blade = go.transform; bladeLength = part.scale.z; }
                 }
             }
+            // 진짜 모델이 있으면 도형은 숨기고(칼날 궤적용 위치는 유지) 모델을 그 자리에 맞춰 넣는다
+            if (w && w.rightModel) ReplaceWithModel(modelRoot, w.rightModel);
+            if (w && w.leftModel && leftRoot) ReplaceWithModel(leftRoot, w.leftModel);
+
             // 손에 붙은 방패는 가드 애니메이션이 들어 올리므로 코드로 움직이지 않는다
             if (guard) guard.SetShield(hands ? null : shield);
+        }
+
+        /// <summary>
+        /// root 아래 도형 부품들이 차지하는 상자에 모델을 맞춘다.
+        /// 모델의 가장 긴 축 → 상자의 가장 긴 축, 가장 얇은 축 → 가장 얇은 축이 되도록 돌리고, 가장 긴 길이가 같아지게 키운다.
+        /// </summary>
+        void ReplaceWithModel(Transform root, GameObject prefab)
+        {
+            var parts = new List<Renderer>(root.GetComponentsInChildren<Renderer>());
+            if (parts.Count == 0) return;
+            var box = LocalBounds(root, parts);
+            foreach (var r in parts) r.enabled = false;
+
+            var model = Instantiate(prefab, root);
+            model.name = "Weapon Mesh";
+            foreach (var c in model.GetComponentsInChildren<Collider>()) Destroy(c);
+            model.transform.localPosition = Vector3.zero;
+            model.transform.localRotation = Quaternion.identity;
+            model.transform.localScale = Vector3.one;
+            var mb = LocalBounds(model.transform, model.GetComponentsInChildren<Renderer>());
+            if (mb.size.sqrMagnitude < 1e-6f) return;
+
+            int[] mAxes = SortAxes(mb.size), bAxes = SortAxes(box.size);
+            // 모델 축 mAxes[i] → 상자 축 bAxes[i] 로 보내는 회전 (거울상이면 가장 얇은 축을 뒤집는다)
+            var cols = new Vector3[3];
+            for (int i = 0; i < 3; i++) cols[mAxes[i]] = Axis(bAxes[i]);
+            if (Vector3.Dot(Vector3.Cross(cols[0], cols[1]), cols[2]) < 0f) cols[mAxes[2]] = -cols[mAxes[2]];
+            var rot = Quaternion.LookRotation(cols[2], cols[1]);
+
+            float scale = box.size[bAxes[0]] / Mathf.Max(0.0001f, mb.size[mAxes[0]]);
+            model.transform.localRotation = rot;
+            model.transform.localScale = Vector3.one * scale;
+            model.transform.localPosition = box.center - rot * (mb.center * scale);
+        }
+
+        static Vector3 Axis(int i) => i == 0 ? Vector3.right : i == 1 ? Vector3.up : Vector3.forward;
+
+        /// <summary>크기가 큰 축부터 (0=x, 1=y, 2=z)</summary>
+        static int[] SortAxes(Vector3 size)
+        {
+            var axes = new List<int> { 0, 1, 2 };
+            axes.Sort((a, b) => size[b].CompareTo(size[a]));
+            return axes.ToArray();
+        }
+
+        /// <summary>root 로컬 좌표에서 렌더러 메시들을 감싸는 상자</summary>
+        static Bounds LocalBounds(Transform root, IEnumerable<Renderer> renderers)
+        {
+            var toRoot = root.worldToLocalMatrix;
+            bool any = false;
+            var b = new Bounds();
+            foreach (var r in renderers)
+            {
+                Mesh mesh = r is SkinnedMeshRenderer sk ? sk.sharedMesh : r.TryGetComponent(out MeshFilter mf) ? mf.sharedMesh : null;
+                if (!mesh) continue;
+                var m = toRoot * r.transform.localToWorldMatrix;
+                var mbounds = mesh.bounds;
+                for (int i = 0; i < 8; i++)
+                {
+                    var corner = mbounds.center + Vector3.Scale(mbounds.extents, new Vector3((i & 1) == 0 ? -1 : 1, (i & 2) == 0 ? -1 : 1, (i & 4) == 0 ? -1 : 1));
+                    var p = m.MultiplyPoint3x4(corner);
+                    if (!any) { b = new Bounds(p, Vector3.zero); any = true; }
+                    else b.Encapsulate(p);
+                }
+            }
+            return b;
         }
 
         Material MaterialFor(Color c)

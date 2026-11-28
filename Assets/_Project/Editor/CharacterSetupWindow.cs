@@ -590,6 +590,7 @@ namespace SoulsHunter.EditorTools
                 return false;
             }
 
+            EnsureCharacterMaterial(modelAsset, out _);
             var tool = CreateInstance<CharacterSetupWindow>();
             try
             {
@@ -606,6 +607,110 @@ namespace SoulsHunter.EditorTools
             }
             EditorPrefs.SetString(ModelPathPref, AssetDatabase.GetAssetPath(modelAsset));
             return true;
+        }
+
+        [MenuItem("SoulsHunter/Fix Character Materials")]
+        static void FixMaterialsMenu()
+        {
+            var model = CurrentModelAsset();
+            if (!model) model = AssetDatabase.LoadAssetAtPath<GameObject>(EditorPrefs.GetString(ModelPathPref, DefaultModelPath));
+            if (!model) model = AssetDatabase.LoadAssetAtPath<GameObject>(DefaultModelPath);
+            var mat = EnsureCharacterMaterial(model, out string report);
+            EditorUtility.DisplayDialog("SoulsHunter", mat ? $"캐릭터 재질을 URP로 만들었어요.\n{report}" : $"재질을 만들지 못했어요.\n{report}", "확인");
+        }
+
+        /// <summary>
+        /// 모델 FBX에 묻혀 있는 텍스처를 꺼내 URP Lit 재질을 만들고, 모델의 모든 재질을 그걸로 바꾼다 (하얗게 보이는 문제 해결).
+        /// 이미 바꿔 두었으면 그대로 둔다.
+        /// </summary>
+        public static Material EnsureCharacterMaterial(GameObject modelAsset, out string report)
+        {
+            report = "";
+            string path = modelAsset ? AssetDatabase.GetAssetPath(modelAsset) : "";
+            if (AssetImporter.GetAtPath(path) is not ModelImporter importer)
+            {
+                report = "캐릭터 모델 FBX를 찾지 못했어요.";
+                return null;
+            }
+
+            string dir = Path.GetDirectoryName(path).Replace('\\', '/');
+            string name = Path.GetFileNameWithoutExtension(path);
+            string folder = $"{dir}/{name}_Textures";
+            if (!AssetDatabase.IsValidFolder(folder))
+            {
+                AssetDatabase.CreateFolder(dir, $"{name}_Textures");
+                importer.ExtractTextures(folder);
+                AssetDatabase.Refresh();
+            }
+
+            Texture2D diffuse = null, normal = null, spec = null;
+            foreach (var guid in AssetDatabase.FindAssets("t:Texture2D", new[] { folder }))
+            {
+                string tp = AssetDatabase.GUIDToAssetPath(guid);
+                string lower = Path.GetFileNameWithoutExtension(tp).ToLowerInvariant();
+                var tex = AssetDatabase.LoadAssetAtPath<Texture2D>(tp);
+                if (lower.Contains("normal") || lower.Contains("nrm"))
+                {
+                    if (AssetImporter.GetAtPath(tp) is TextureImporter ti && ti.textureType != TextureImporterType.NormalMap)
+                    {
+                        ti.textureType = TextureImporterType.NormalMap;
+                        ti.SaveAndReimport();
+                    }
+                    normal = tex;
+                }
+                else if (lower.Contains("spec") || lower.Contains("gloss")) spec = tex;
+                else if (lower.Contains("diffuse") || lower.Contains("albedo") || lower.Contains("base") || lower.Contains("color") || !diffuse) diffuse = tex;
+            }
+            if (!diffuse)
+            {
+                report = "모델 안에 텍스처가 없어요.";
+                return null;
+            }
+
+            string matPath = $"{folder}/{name}_URP.mat";
+            var mat = AssetDatabase.LoadAssetAtPath<Material>(matPath);
+            if (!mat)
+            {
+                mat = new Material(Shader.Find("Universal Render Pipeline/Lit"));
+                AssetDatabase.CreateAsset(mat, matPath);
+            }
+            mat.SetTexture("_BaseMap", diffuse);
+            mat.SetTexture("_MainTex", diffuse);
+            mat.SetColor("_BaseColor", Color.white);
+            if (normal)
+            {
+                mat.SetTexture("_BumpMap", normal);
+                mat.EnableKeyword("_NORMALMAP");
+            }
+            if (spec)
+            {
+                // 스페큘러 워크플로 (Mixamo 텍스처 구성)
+                mat.SetFloat("_WorkflowMode", 0f);
+                mat.SetTexture("_SpecGlossMap", spec);
+                mat.EnableKeyword("_SPECULAR_SETUP");
+                mat.EnableKeyword("_METALLICSPECGLOSSMAP");
+                mat.SetFloat("_Smoothness", 0.45f);
+            }
+            else
+            {
+                mat.SetFloat("_Metallic", 0f);
+                mat.SetFloat("_Smoothness", 0.35f);
+            }
+            EditorUtility.SetDirty(mat);
+
+            // 모델의 재질을 전부 이 재질로
+            bool changed = false;
+            foreach (var m in AssetDatabase.LoadAllAssetsAtPath(path).OfType<Material>())
+            {
+                var id = new AssetImporter.SourceAssetIdentifier(typeof(Material), m.name);
+                if (importer.GetExternalObjectMap().TryGetValue(id, out var existing) && existing == mat) continue;
+                importer.AddRemap(id, mat);
+                changed = true;
+            }
+            if (changed) importer.SaveAndReimport();
+            AssetDatabase.SaveAssets();
+            report = $"{Path.GetFileName(path)} → {matPath}";
+            return mat;
         }
 
         /// <summary>Player 아래에 입혀 둔 캐릭터 모델의 원본 에셋 (없으면 null)</summary>
